@@ -17,11 +17,24 @@ header('Referrer-Policy: same-origin');
 <meta name="csrf-token" content="<?= htmlspecialchars($_SESSION['csrf'], ENT_QUOTES) ?>">
 <title>Nomenclatura IUPAC de alcanos</title>
 <link rel="stylesheet" href="assets/estilos.css?v=3.0">
+<style>
+  /* Logo institucional en el encabezado (esquina superior izquierda) */
+  .cabecera__marca { display: flex; align-items: center; gap: 1.1rem; }
+  .cabecera__logo  { flex: 0 0 auto; height: 84px; width: auto; display: block; }
+  .cabecera__texto { min-width: 0; }
+  @media (max-width: 640px) {
+    .cabecera__marca { gap: .75rem; align-items: flex-start; }
+    .cabecera__logo  { height: 56px; }
+  }
+</style>
 </head>
 <body>
 <header class="cabecera">
-  <div class="cabecera__inner">
-    <div>
+  <div class="cabecera__inner cabecera__marca">
+    <a href="https://www.unachi.ac.pa/" target="_blank" rel="noopener" title="Universidad Autónoma de Chiriquí">
+      <img class="cabecera__logo" src="assets/img/logo-unachi.png" alt="Logo de la Universidad Autónoma de Chiriquí (UNACHI)" width="84" height="84" decoding="async">
+    </a>
+    <div class="cabecera__texto">
       <p class="cabecera__inst">Universidad Autónoma de Chiriquí · Facultad de Ciencias Naturales y Exactas · Escuela de Química</p>
       <h1>Nomenclatura IUPAC de alcanos, cicloalcanos y haloalcanos</h1>
       <p class="cabecera__sub">Genere o dibuje una estructura, escriba su nombre y compruébelo con las Recomendaciones IUPAC 2013.</p>
