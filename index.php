@@ -129,6 +129,7 @@ header('Referrer-Policy: same-origin');
       <li><b>Formas alternativas</b> aceptadas en nomenclatura general: prefijos retenidos no sustituidos (isopropil, sec-butil, isobutil, terc-butil, isopentil, neopentil, terc-pentil) y prefijos numerados desde el átomo de unión (1-metiletil, 1,2-dimetilpropil), según las reglas IUPAC 1979 (A-2.25, A-2.6).</li>
       <li>En un cicloalcano monosustituido no se escribe el localizador 1 (P-14.3.4).</li>
     </ol>
+    <p><b>Dr. Pedro González Beermann Unachi-2026</b></p>p>
     <p class="ref">Ref.: Favre, H. A.; Powell, W. H. <i>Nomenclature of Organic Chemistry. IUPAC Recommendations and Preferred Names 2013</i>. RSC, 2014. doi:10.1039/9781849733069 · Editor molecular: Bienfait, B.; Ertl, P. <i>J. Cheminform.</i> 2013, 5, 24. doi:10.1186/1758-2946-5-24</p>
   </details>
 </main>
