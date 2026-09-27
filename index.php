@@ -32,7 +32,7 @@ header('Referrer-Policy: same-origin');
 <header class="cabecera">
   <div class="cabecera__inner cabecera__marca">
     <a href="https://www.unachi.ac.pa/" target="_blank" rel="noopener" title="Universidad Autónoma de Chiriquí">
-      <img class="cabecera__logo" src="assets/img/logo-unachi.png" alt="Logo de la Universidad Autónoma de Chiriquí (UNACHI)" width="84" height="84" decoding="async">
+      <img class="cabecera__logo" src="assets/img/unachi-logo.png" alt="Logo de la Universidad Autónoma de Chiriquí (UNACHI)" width="84" height="84" decoding="async">
     </a>
     <div class="cabecera__texto">
       <p class="cabecera__inst">Universidad Autónoma de Chiriquí · Facultad de Ciencias Naturales y Exactas · Escuela de Química</p>
