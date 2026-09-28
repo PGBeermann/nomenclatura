@@ -17,6 +17,7 @@ $familias = [
     'alquinos'   => ['Alquinos (C≡C)', 'prop-1-ino'],
     'aromaticos' => ['Aromáticos (benceno)', 'etilbenceno'],
     'biciclos'   => ['Dos anillos (fusionados, puente, espiro, bifenilo…)', 'naftaleno, biciclo[2.2.1]heptano'],
+    'heterociclos' => ['Heterociclos (piridina, furano, pirrolidina, indol…)', 'piridin-3-ol, oxolano, 1H-indol'],
     'alcoholes'  => ['Alcoholes', 'propan-2-ol'],
     'fenoles'    => ['Fenoles', '4-metilfenol'],
     'eteres'     => ['Éteres', 'metoxietano'],
@@ -28,6 +29,7 @@ $familias = [
     'amidas'     => ['Amidas', 'N-metilacetamida'],
     'nitrilos'   => ['Nitrilos', 'butanonitrilo'],
     'nitro'      => ['Nitro', 'nitrobenceno'],
+    'azufre'     => ['Azufre (tioles, sulfuros, sulfóxidos, sulfonas, ácidos sulfónicos)', 'etanotiol, (metilsulfanil)benceno'],
 ];
 ?><!doctype html>
 <html lang="es">
@@ -36,7 +38,7 @@ $familias = [
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf-token" content="<?= htmlspecialchars($_SESSION['csrf'], ENT_QUOTES) ?>">
 <title>Nomenclatura IUPAC de compuestos orgánicos</title>
-<link rel="stylesheet" href="assets/estilos.css?v=4.1">
+<link rel="stylesheet" href="assets/estilos.css?v=4.2">
 </head>
 <body>
 <header class="cabecera">
@@ -99,7 +101,7 @@ $familias = [
         <h2>Estructura</h2>
         <span id="formula" class="formula" title="Fórmula molecular"></span>
       </div>
-      <p id="avisoDibujo" class="aviso" hidden>Modo dibujo: dibuje una molécula con C, H, N, O y halógenos (cadenas; anillos simples, fusionados, con puente o espiro de hasta dos anillos; enlaces sencillos, dobles o triples), escriba su nombre y pulse <b>Verificar</b> o <b>Desplegar</b>.</p>
+      <p id="avisoDibujo" class="aviso" hidden>Modo dibujo: dibuje una molécula con C, H, N, O, S y halógenos (cadenas; carbociclos y heterociclos simples, fusionados, con puente o espiro de hasta dos anillos; enlaces sencillos, dobles o triples), escriba su nombre y pulse <b>Verificar</b> o <b>Desplegar</b>.</p>
       <div id="jsme_container" class="jsme"><p class="cargando">Cargando editor JSME…</p></div>
       <div class="opciones">
         <label class="check"><input type="checkbox" id="chkNumeracion" disabled> Mostrar numeración de la estructura principal</label>
@@ -154,6 +156,8 @@ $familias = [
       <li><b>Prefijos sustituyentes</b> preferidos (P-29): propan-2-il, butan-2-il, etenil, prop-2-en-1-il, metiliden; se retienen terc-butil, fenil y bencil. Las formas isopropil, sec-butil, vinil, alil e isopropiliden se aceptan en nomenclatura general.</li>
       <li><b>Ésteres, aminas y amidas</b>: «propanoato de etilo»; los sustituyentes del nitrógeno llevan el localizador N (N,N-dimetiletanamina, N-fenilacetamida). Se muestran también los nombres de clase funcional aceptados (etil metil éter, alcohol isopropílico, cloruro de vinilo, etil(metil)amina).</li>
       <li><b>Dos anillos</b> (fase 2): biciclos fusionados con nombre retenido (naftaleno, indeno, azuleno, pentaleno, heptaleno) y su numeración fija (4a, 8a); hidrógeno indicado (1H-indeno), prefijos hidro (2,3-dihidro-1H-indeno, decahidronaftaleno) e hidrógeno añadido (3,4-dihidronaftalen-1(2H)-ona) (P-25, P-31.1.4.2.4, P-14.7); biciclos con puente de von Baeyer (biciclo[2.2.1]heptano, P-23.2); espiro (espiro[4.5]decano, P-24.2); ensamblajes (1,1'-bifenilo, P-28); nomenclatura multiplicativa (1,1'-metilendibenceno, 4,4'-(propano-2,2-diil)difenol, P-15.3); antigüedad de anillos: más anillos, más átomos, menos hidrogenado (P-44.2, P-44.4).</li>
+      <li><b>Heterociclos</b> (fase 3A): nombres retenidos (pirrol, furano, tiofeno, imidazol, pirazol, piridina, pirimidina, pirazina, pirano; pirrolidina, piperidina, piperazina, morfolina; indol, quinolina, isoquinolina, 1-benzofurano, 1H-bencimidazol, purina…) y de Hantzsch-Widman (oxirano, azetidina, oxolano, 1,3-oxazol, 1,4-dioxano, 1,3,5-triazina) con los localizadores más bajos para los heteroátomos, primero O, luego S, luego N (P-22.2, P-31.1.4.2.2); prefijos de reemplazo en puentes y espiro (1-azabiciclo[2.2.2]octano, 1,4-dioxaespiro[4.5]decano, P-15.4); lactonas y lactamas como cetonas del heterociclo (oxolan-2-ona, pirrolidin-2-ona); hidrógeno añadido (piridin-2(1H)-ona, pirimidina-2,4(1H,3H)-diona). Los heterociclos con N son preferidos a los demás anillos (P-44.2).</li>
+      <li><b>Azufre</b>: tioles (etanotiol, sufijo -tiol, prefijo sulfanil), sulfuros ((metilsulfanil)metano), sulfóxidos y sulfonas ((metanosulfinil)metano, (metanosulfonil)metano) y ácidos sulfónicos (ácido bencenosulfónico, prefijo sulfo) (P-63, P-65.3).</li>
       <li><b>Omisión de localizadores</b> (P-14.3.4): etanol, cloroetano, ciclohexanol, propeno, ciclohexeno; pero 3-metilciclohex-1-eno, propan-2-ona, butan-2-ona.</li>
     </ol>
     <p><b>Dr. Pedro González Beermann · UNACHI 2026</b></p>
@@ -161,7 +165,7 @@ $familias = [
   </details>
 </main>
 
-<script src="assets/app.js?v=4.1"></script>
+<script src="assets/app.js?v=4.2"></script>
 <script src="jsme/jsme.nocache.js"></script>
 </body>
 </html>

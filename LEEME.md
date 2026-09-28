@@ -1,6 +1,31 @@
-# Nomenclatura IUPAC de compuestos orgánicos (JSME + PHP) · v4.1
+# Nomenclatura IUPAC de compuestos orgánicos (JSME + PHP) · v4.2
 
 Aplicación web didáctica de la Escuela de Química (UNACHI). Genera estructuras o recibe las que dibuja el estudiante en **JSME**, calcula su **nombre IUPAC preferido (PIN)** a partir del grafo molecular según las *Recomendaciones IUPAC 2013* y presenta las demás formas aceptadas: prefijos tradicionales y criterios de 1979/1993, prefijos sistemáticos de 1979, nombres de clase funcional y nombres comunes.
+
+## Novedades de la v4.2 (fase 3A: heterociclos y azufre)
+
+- **Dos casillas nuevas**: «Heterociclos» y «Azufre». Combinada con «Dos anillos», la primera genera heterociclos bicíclicos.
+- **Lector de estructuras**: acepta S y los heteroátomos aromáticos de JSME (n, o, s, [nH]). Cada sistema aromático se convierte en su estructura de Kekulé; el N–H de pirroles e imidazoles, el O y el S no participan en los dobles enlaces.
+- **Heteromonociclos con nombre retenido** (P-22.2.1):
+  - insaturados: pirrol, furano, tiofeno, imidazol, pirazol, piridina, piridazina, pirimidina, pirazina, pirano, tiopirano;
+  - saturados: pirrolidina, pirazolidina, imidazolidina, piperidina, piperazina, morfolina.
+- **Nomenclatura de Hantzsch-Widman** (P-22.2.2) para anillos de 3 a 10 átomos: `oxirano`, `aziridina`, `tiirano`, `oxetano`, `azetidina`, `oxolano`, `tiolano`, `1,3-dioxolano`, `oxano`, `1,4-dioxano`, `1,3-oxazol`, `1,2-oxazol`, `1,3-tiazol`, `1,3,5-triazina`, `1H-1,2,4-triazol`, `azepano`.
+- **Numeración de los heteroátomos**: reciben los localizadores más bajos y, si hay elección, primero O, luego S y luego N (P-31.1.4.2.2).
+- **Hidrógeno indicado y añadido en heterociclos**: `2H-pirano`, `piridin-2(1H)-ona`, `pirimidina-2,4(1H,3H)-diona` (uracilo), `1,3,7-trimetil-3,7-dihidro-1H-purina-2,6-diona` (cafeína).
+- **Heterociclos fusionados con nombre retenido**:
+  - indol, isoindol, 1-benzofurano, 2-benzofurano, 1-benzotiofeno, 1H-bencimidazol, 1H-indazol, 1,3-benzoxazol, 1,2-benzoxazol, 1,3-benzotiazol, purina;
+  - quinolina, isoquinolina, quinazolina, quinoxalina, cinolina, ftalazina, 1-benzopirano, 2-benzopirano, 1-benzotiopirano, 1,4-benzodioxina.
+- **Heterociclos parcialmente hidrogenados**: prefijos hidro sobre el nombre insaturado, como en `2,3-dihidro-1H-indol`, `1,2,3,4-tetrahidroquinolina`, `3,4-dihidro-2H-1-benzopirano` y `3,4-dihidro-2H-pirano`.
+- **Prefijos de reemplazo en puentes y espiro** (P-15.4): `1-azabiciclo[2.2.2]octano` (quinuclidina), `7-oxabiciclo[2.2.1]heptano`, `1,4-dioxaespiro[4.5]decano`.
+- **Lactonas y lactamas** como cetonas del heterociclo: `oxolan-2-ona`, `pirrolidin-2-ona`, `azepan-2-ona`, `2H-1-benzopiran-2-ona` (cumarina).
+- **N-acil heterociclos**, nombrados como cetonas o con sufijos de anillo: `1-(piperidin-1-il)etan-1-ona`, `piperidina-1-carbaldehído`, `pirrolidina-1-carboxilato de etilo`.
+- **Antigüedad de anillos con heteroátomos** (P-44.2.1): un heterociclo es preferido a un carbociclo, y uno con N a los demás. Por ejemplo, `2-fenilpiridina`, `3-(1-metilpirrolidin-2-il)piridina` (nicotina) y `2,2'-bipiridina`.
+- **Compuestos de azufre**:
+  - tioles: sufijo `-tiol`, prefijo `sulfanil` (`etanotiol`, `bencenotiol`);
+  - sulfuros: `(metilsulfanil)metano`;
+  - sulfóxidos y sulfonas: `(metanosulfinil)metano` (DMSO), `(metanosulfonil)metano`;
+  - ácidos sulfónicos, que en el orden de prioridad van justo después de los carboxílicos: `ácido bencenosulfónico`, `ácido 4-metilbenceno-1-sulfónico`.
+- **Nombres de clase funcional y comunes**: sulfuro de dimetilo, DMSO, THF, cafeína, uracilo, adenina, nicotinamida, furfural, cumarina, quinuclidina, tropano, tiofenol, ácido p-toluenosulfónico.
 
 ## Novedades de la v4.1 (fase 2: dos anillos, fusionados o no)
 
@@ -99,6 +124,9 @@ Con **OPSIN** (nombre → estructura) y **RDKit** (SMILES canónico), sobre los 
 | **Fase 2** · `aleatorias_bic.py`: estructuras de dos anillos con grupos funcionales (2 semillas) | 3 756 | 11 330 | **0** * |
 | **Fase 2** · invariancia ante el orden de los átomos y la forma de Kekulé | 11 268 | — | **0** |
 | **Fase 2** · `esperados_fase2.tsv`: 34 compuestos de referencia en español (tetralona, alcanfor, bisfenol A, BINOL…) | 34 | 34 | **0** |
+| **Fase 3A** · `aleatorias_het.py`: heterociclos y compuestos de azufre con grupos funcionales (3 semillas) | 5 714 | 17 176 | **0** |
+| **Fase 3A** · invariancia ante el orden de los átomos y la forma de Kekulé | 17 142 | — | **0** |
+| **Fase 3A** · `esperados_fase3a.tsv`: 43 compuestos de referencia en español (cafeína, nicotina, uracilo, adenina, DMSO, cumarina, quinuclidina…) | 43 | 43 | **0** |
 
 \* En 157 nombres de pentaleno y heptaleno, OPSIN devuelve otra estructura de Kekulé del mismo compuesto. Estos sistemas no son aromáticos para RDKit y el nombre IUPAC no distingue entre sus estructuras de Kekulé, así que la prueba los acepta como equivalentes.
 | `regresion_alcanos.php`: igualdad con el motor v3.0 (6 variantes por estructura) | 3000 | 18 000 | **0** |
@@ -110,15 +138,23 @@ cd tests
 python3 validar_org.py gen 2000 1
 python3 aleatorias_org.py 2000 1
 python3 aleatorias_bic.py 1500 1        # fase 2
+python3 aleatorias_het.py 1500 1        # fase 3A
 php regresion_alcanos.php 1000
 ```
 
 OPSIN comprueba que cada nombre corresponde exactamente a la estructura. La elección del nombre *preferido* la garantizan los criterios de la búsqueda exhaustiva del motor, que se comprobaron con los 44 casos de referencia.
 
-## Alcance y limitaciones (v4.1)
+## Alcance y limitaciones (v4.2)
 
 - **Esqueleto**: cadenas de hasta 20 C; anillos simples; sistemas de dos anillos fusionados, con puente o espiro; ensamblajes y unidades multiplicadas de dos sistemas idénticos. Puede haber cualquier número de sistemas de anillos como sustituyentes.
-- **Pendiente**: sistemas de tres o más anillos (antraceno, fenantreno, adamantano, esteroides); biciclos fusionados sin nombre retenido (p. ej., `benzo[7]anuleno`); heterociclos (piridina, furano, lactonas); haluros de acilo, anhídridos, imidas, iminas, tioles; estereodescriptores E/Z y R/S, que se ignoran si se dibujan.
+- **Pendiente (fases 3B y 3C)**:
+  - estereodescriptores E/Z y R/S, que se ignoran si se dibujan;
+  - haluros de acilo, anhídridos, imidas, iminas, oximas, carbamatos y ureas;
+  - sistemas de tres o más anillos;
+  - fusionados sin nombre retenido (p. ej., `benzo[7]anuleno`, furo[3,2-b]piridina, naftiridinas);
+  - heterociclos con S oxidado en el anillo (sulfolano), disulfuros, sulfonamidas y ésteres sulfónicos.
+- **Sulfóxidos y sulfonas**: los prefijos `alcanosulfinil` y `alcanosulfonil` se construyen para grupos alquilo, cicloalquilo, arilo y heteroarilo. Para grupos R ramificados poco comunes (p. ej., isobutilo) en el nombre preferido, el programa lo informa.
+- **Tropano**: el programa escribe `8-metil-8-azabiciclo[3.2.1]octano`, con el localizador del anillo en el sustituyente del N.
 - **Nomenclatura multiplicativa**: se aplica cuando las dos unidades son idénticas, con los mismos prefijos. Si llevan prefijos distintos, el programa usa nomenclatura sustitutiva, que es un nombre válido. Conviene revisar esos casos con las reglas P-15.3.
 - **Ensamblajes con componentes parcialmente hidrogenados** o con hidrógeno indicado (p. ej., biindeno): se nombran de forma sustitutiva.
 - Con más de dos grupos –COOH, –CHO o –CN en una cadena acíclica se usan prefijos carboxi, formil o ciano en lugar de la excepción P-65.1.2.2.
