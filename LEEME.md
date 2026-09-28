@@ -1,130 +1,111 @@
-# Nomenclatura IUPAC de alcanos, cicloalcanos y haloalcanos (JSME + PHP) · v3.0
+# Nomenclatura IUPAC de compuestos orgánicos (JSME + PHP) · v4.0
 
-Aplicación web didáctica que genera estructuras de alcanos lineales, ramificados y cicloalcanos (con o sin ramificaciones), o recibe las que dibuja el estudiante en **JSME**. Calcula su **nombre IUPAC** a partir del grafo molecular, según las *Recomendaciones IUPAC 2013*, y presenta además las formas alternativas de nombrar los sustituyentes que aceptan las reglas de 1979/1993.
+Aplicación web didáctica de la Escuela de Química (UNACHI). Genera estructuras o recibe las que dibuja el estudiante en **JSME**, calcula su **nombre IUPAC preferido (PIN)** a partir del grafo molecular según las *Recomendaciones IUPAC 2013* y presenta las demás formas aceptadas: prefijos tradicionales y criterios de 1979/1993, prefijos sistemáticos de 1979, nombres de clase funcional y nombres comunes.
 
-## Novedades de la v3.0
+## Novedades de la v4.0 (fase 1)
 
-- **Haloalcanos (F, Cl, Br, I)**: la casilla *Incluir halógenos* agrega de 1 a 4 halógenos según el nivel. En el modo *Dibujar*, el estudiante también puede usar los botones F, Cl, Br e I de JSME.
-- **Nombre radicofuncional** para monohaloalcanos con grupo R sencillo: `bromuro de isopropilo`, `cloruro de terc-butilo`, `cloruro de ciclohexilo`, junto con su versión inglesa (`isopropyl bromide`).
-- **Prefijos sec- y neo-** en la verificación: se aceptan las variantes de escritura frecuentes (`s-butil`, `neo-pentil`, `iso-propil`, `iodo`/`yodo`), que se normalizan antes de comparar.
+- **Nuevo motor** `lib/IupacOrganica.php`: nomenclatura sustitutiva general con grupo principal, sufijos y prefijos.
+- **Familias**: alquenos, alquinos, benceno y sus derivados, alcoholes, fenoles, éteres, aminas, aldehídos, cetonas, ácidos carboxílicos, ésteres, amidas, nitrilos, nitroderivados y halogenuros.
+- **Casillas por tipo de compuesto**, en el mismo estilo de trabajo que la casilla *Incluir halógenos* de la v3.0. El navegador recuerda la selección.
+- **Orden de prioridad de clases (P-41)**: el grupo principal va como sufijo y los demás como prefijos. Los niveles intermedio y avanzado combinan grupos para practicarlo.
+- **Criterio de 2013 para la cadena principal** (primero la longitud y después la insaturación), con una nota explicativa cuando las reglas de 1979/1993 elegirían otra cadena. Ejemplo: `3-metilidenhexano` (2013) frente a `2-etilpent-1-eno` (1993).
+- **Nombres retenidos preferidos**: fenol, anilina, ácido benzoico, benzaldehído, benzamida, benzonitrilo, ácido fórmico, ácido acético, ácido oxálico, formaldehído, acetaldehído, acetamida, acetonitrilo, tolueno, xileno, anisol y acetileno.
+- **Verificación ampliada**. Acepta el PIN, las formas tradicional y 1979, los nombres de clase funcional (`alcohol isopropílico`, `etil metil éter`, `etil(metil)amina`) y los nombres comunes (`acetona`, `ácido acético`, `estireno`), en español o en inglés. También detecta el formato anterior a 1993 (`2-butanol` → `butan-2-ol`).
+- **Regresión**: en el dominio de la v3.0 (alcanos, cicloalcanos y haloalcanos) el motor nuevo produce los mismos nombres que `IupacAlcanos.php`. La única diferencia es intencional: ya no se escribe guion entre prefijos sin localizador (`bromoclorometil`, no `bromo-clorometil`).
 
 ## Funcionamiento
 
 | Botón | Acción |
 |---|---|
-| **Generar** | El servidor (`api.php`) crea una estructura aleatoria según el tipo y el nivel elegidos, calcula sus nombres y los guarda **solo en la sesión PHP**. Al navegador se envía únicamente el SMILES y la fórmula. |
-| **Dibujar** | Limpia el editor y activa el modo de edición de JSME. El estudiante dibuja su propio alcano o cicloalcano, escribe el nombre y pulsa **Verificar** o **Desplegar**. |
-| **Verificar** | Compara la respuesta del estudiante con todos los nombres válidos (preferido 2013, retenido y sistemático 1979, en español o en inglés). La retroalimentación es graduada: correcto (indica qué forma usó), error de puntuación o error de localizadores. |
-| **Desplegar** | Muestra el nombre IUPAC preferido y las otras formas aceptadas, por ejemplo `(propan-2-il)` / `isopropil` / `(1-metiletil)`. Incluye una tabla de equivalencias de los sustituyentes, el nombre en inglés, la justificación paso a paso con la referencia a cada regla y la numeración dibujada sobre la estructura. |
-
-**Estructuras dibujadas o modificadas.** Cada vez que se pulsa *Verificar* o *Desplegar*, el programa compara lo que hay en el editor con la última estructura cargada. Si el estudiante la cambió, la envía al servidor (acción `analizar`) y la nombra. Si no es un alcano, el estudiante recibe un mensaje explicativo: enlaces dobles o triples, heteroátomos, anillos aromáticos, más de un anillo, más de una molécula, cadena principal de más de 20 C o carbonos con más de cuatro enlaces.
+| **Generar** | `api.php` crea una estructura aleatoria según el esqueleto, el nivel y las familias marcadas, calcula sus nombres y los guarda **solo en la sesión PHP**. Al navegador se envían únicamente el SMILES y la fórmula. |
+| **Dibujar** | Limpia el editor y activa el modo de edición de JSME. |
+| **Verificar** | Compara la respuesta con todos los nombres válidos, con retroalimentación graduada: correcto (indica qué forma se usó), puntuación, localizadores o incorrecto. |
+| **Desplegar** | Muestra el PIN, las otras formas aceptadas, la equivalencia de los sustituyentes, el nombre en inglés, la justificación paso a paso con la regla IUPAC de cada decisión y la numeración sobre la estructura. |
 
 ### Niveles
 
-| Nivel | Cadena principal | Ramificaciones | Sustituyentes |
+| Nivel | Cadena | Anillo | Grupos funcionales |
 |---|---|---|---|
-| Básico | 4–7 C | 1–2 | metil, etil |
-| Intermedio | 5–10 C | 1–3 | + propil, isopropil, butil, sec‑butil, isobutil, terc‑butil |
-| Avanzado | **8–20 C** | 2–5 | + pentil, isopentil, neopentil, terc‑pentil, pentan‑2‑il, pentan‑3‑il, 2‑metilbutil, 3‑metilbutan‑2‑il, 3,3‑dimetilbutan‑2‑il, 2,3‑dimetilbutil, 2‑metilpentan‑3‑il, 3,3‑dimetilbutil, 2,3‑dimetilbutan‑2‑il |
+| Básico | 2–6 C, 0–1 ramas | 3–6 C | 1 |
+| Intermedio | 3–8 C, hasta 2 ramas | 4–7 C | 1–2 |
+| Avanzado | 4–12 C, 1–3 ramas | 5–8 C | 2–3 (combinados) |
 
-En el nivel avanzado, los cicloalcanos van de 5 a 12 C. Como la cadena principal se determina después de colocar las ramas, pueden aparecer sustituyentes complejos anidados, por ejemplo `[3,3-dimetil-1-(1-metiletil)butil]`.
+Sin casillas marcadas se generan alcanos y cicloalcanos. *Aromáticos* o *Fenoles* sustituyen el anillo por un benceno o añaden un fenilo a la cadena.
 
-## Haloalcanos: reglas aplicadas
+## Reglas implementadas (IUPAC 2013)
 
 | Aspecto | Regla | Ejemplo |
 |---|---|---|
-| Los halógenos solo se expresan como prefijos (fluoro, cloro, bromo, yodo), nunca como sufijo | P‑61.3.1 | `2-bromopropano` |
-| La cadena principal se busca solo entre carbonos (la más larga); los halógenos cuentan en el criterio de mayor número de sustituyentes | P‑44.3, P‑45.2.1 | `1-bromo-2,2-dimetilpropano` |
-| Localizadores más bajos para todos los prefijos en conjunto (halógenos y alquilos) y, si hay empate, para el citado primero en orden alfabético | P‑31.1.4, P‑14.5 | `1-bromo-4-cloro-2-metilpentano` |
-| Orden alfabético por idioma (en español *yodo* va al final; en inglés *iodo* va entre *ethyl* y *methyl*) | P‑14.5 | `2-cloro-3-yodobutano` |
-| Halógenos dentro de un sustituyente: prefijo complejo entre paréntesis | P‑16.5 | `3-(clorometil)-4-etilhexano`, `(2-bromoetil)` |
-| Omisión de localizadores: metano, etano monosustituido y sustitución total por un mismo prefijo | P‑14.3.4 | `triclorometano`, `cloroetano`, `hexafluoroetano` |
-| Los prefijos retenidos (terc-butil, isopropil…) solo se usan sin sustituir | P‑29.6; 1979 A‑2.25 | `(1-cloro-1-metiletil)`, no «cloroisopropil» |
-| Nombre radicofuncional R–X: aceptado en nomenclatura general, no es nombre preferido | P‑61.3.2 | `cloruro de sec-butilo` |
-
-**Sobre sec- y neo-.** Solo existen como parte de prefijos retenidos **no sustituidos**: *sec*-butil (butan-2-il) y neopentil (2,2-dimetilpropil), igual que isopropil, isobutil, isopentil, *terc*-butil y *terc*-pentil (IUPAC 1979, A‑2.25). El programa no usa «sec-pentil» ni «neohexil», que la IUPAC nunca aceptó porque son ambiguos. En el orden alfabético, *sec*- y *terc*- (en cursiva) se ignoran, mientras que iso- y neo- sí cuentan. Por eso *sec*-butil se ordena en la «b» y neopentil en la «n».
-
-## Formas de nomenclatura presentadas
-
-| Estilo | Sustituyente de ejemplo | Fundamento |
-|---|---|---|
-| **Preferido 2013 (PIN)** | `propan-2-il`, `butan-2-il`, `2-metilpropil`, `3-metilbutan-2-il`, `terc-butil` | P‑29.2 y P‑29.6: cadena más larga que contiene el átomo de unión, con la valencia libre en el localizador más bajo |
-| **Retenido / tradicional** | `isopropil`, `sec-butil`, `isobutil`, `terc-butil`, `isopentil`, `neopentil`, `terc-pentil` | IUPAC 1979, A‑2.25 (prefijos retenidos solo sin sustituir); los demás se nombran como en 1979 |
-| **Sistemático 1979** | `1-metiletil`, `1-metilpropil`, `1,1-dimetiletil`, `1,2-dimetilpropil` | IUPAC 1979, A‑2.6: cadena más larga que empieza en el átomo de unión (C1) |
-
-El orden alfanumérico y, por lo tanto, la numeración cuando hay empate se recalculan para cada estilo. Por eso el mismo compuesto puede llamarse `1-metil-4-(propan-2-il)ciclohexano` (PIN) y `1-isopropil-4-metilciclohexano` (tradicional).
+| Orden de prioridad de clases | P-41 | ácido > éster > amida > nitrilo > aldehído > cetona > alcohol/fenol > amina |
+| Máximo número de grupos principales | P-44.1.1 | `4-(hidroximetil)fenol` |
+| Anillo preferido a la cadena | P-44.1.2.2 | `decilbenceno`, `fenilmetanol` |
+| Cadena más larga; después, más enlaces múltiples y más dobles enlaces | P-44.3, P-44.4.1 | `3-metilidenhexano` |
+| Numeración: grupo principal → enlaces múltiples → dobles enlaces → prefijos → primer prefijo citado | P-31.1.4 | `hex-3-en-1-ino`, `pent-3-en-2-ol` |
+| Sufijos en anillo con carbono externo | P-65, P-66 | `ácido ciclohexanocarboxílico`, `ciclohexanocarbaldehído` |
+| Aldehído o cetona no principal: oxo si el carbono está en la cadena y formil si no lo está | P-64, P-66.6 | `ácido 3-oxopropanoico`, `2-formilbenzamida` |
+| Ésteres | P-65.6 | `propanoato de etilo`, `pentanodioato de 1-etilo y 5-metilo` |
+| Aminas y amidas con localizador N | P-62, P-66.1 | `N,N-dietiletanamina`, `N-fenilacetamida` |
+| Éteres como prefijos alcoxi | P-63.2 | `2-metoxi-2-metilpropano`, `(propan-2-il)oxi` |
+| Omisión de localizadores | P-14.3.4 | `etanol`, `propeno`, `ciclohexeno`, `3-metilciclohex-1-eno` |
+| Orden alfanumérico y multiplicadores | P-14.5, P-16.3 | `N,N,3-trimetil…`, `bis(2-metilpropil)` |
 
 ## Estructura
 
 ```
-alcanos_iupac/
-├── index.php            Interfaz (emite el token CSRF y la sesión)
-├── api.php              Servicio JSON: generar / analizar / desplegar / verificar
-├── lib/IupacAlcanos.php Motor: lector SMILES, generador y algoritmo de nomenclatura (sin dependencias)
-├── assets/app.js        Lógica del cliente e integración con JSME
-├── assets/estilos.css   Estilos adaptables (móvil y escritorio)
-├── jsme/                JSME 2024.04.29 (BSD‑3), servido localmente, sin CDN
-└── tests/               Scripts de validación (acceso web bloqueado)
+nomenclatura/
+├── index.php, server.php   Interfaz (emite el token CSRF y la sesión)
+├── api.php                  Servicio JSON: generar / analizar / desplegar / verificar
+├── lib/IupacOrganica.php    Motor v4.0: lector SMILES, grupos, estructura principal, nombres, explicación, generador
+├── lib/IupacAlcanos.php     Motor v3.0 (solo para la prueba de regresión)
+├── assets/app.js            Cliente e integración con JSME
+├── assets/estilos.css       Estilos adaptables
+├── jsme/                    JSME 2024.04.29 (BSD-3), local, sin CDN
+└── tests/                   Validación (acceso web bloqueado)
 ```
 
-## Instalación en el VPS (Hostinger)
+## Instalación
 
-Requisitos: PHP ≥ 7.4 (probado en PHP 8.4) con `mbstring` y sesiones habilitadas. No usa base de datos.
+Requisitos: PHP ≥ 7.4 (probado en 8.3 y 8.4) con `mbstring` y sesiones. No usa base de datos. El `Dockerfile` no cambia (Dokploy en el VPS de Hostinger): basta con hacer *push* y volver a desplegar. Con Apache, los `.htaccess` bloquean `lib/` y `tests/`. Con Nginx:
 
-1. Suba la carpeta `alcanos_iupac/` al directorio público, por ejemplo `/var/www/html/alcanos_iupac/`. Si actualiza desde la v1.0, reemplace todos los archivos.
-2. **Apache**: los `.htaccess` incluidos bloquean `lib/` y `tests/` (requiere `AllowOverride All`).
-   **Nginx**: agregue al `server {}`:
-   ```nginx
-   location ~ ^/alcanos_iupac/(lib|tests)/ { deny all; return 404; }
-   ```
-3. Use HTTPS. La cookie de sesión se marca como `Secure`, `HttpOnly` y `SameSite=Strict`.
-4. Abra `https://su-dominio/alcanos_iupac/`.
-
-Prueba local: `php -S 127.0.0.1:8080` dentro de la carpeta.
-
-## Reglas implementadas (IUPAC 2013)
-
-- **P‑44.3**: la cadena principal es la cadena continua más larga (hasta 20 C, icosano).
-- **P‑44.1.2.2**: en los cicloalcanos, el anillo es preferido a la cadena como hidruro progenitor. Si el estudiante dibuja una cadena más larga que el anillo, la justificación advierte que las reglas de 1979/1993 tomarían la cadena como progenitor.
-- **P‑45.2.1 → P‑45.2.3 → P‑45.5**: si hay varias cadenas de igual longitud, se prefiere la que tiene más sustituyentes; luego la de localizadores más bajos; luego la que da el localizador más bajo al prefijo citado primero; por último, la que produce el nombre primero en orden alfanumérico.
-- **P‑14.4 / P‑31.1.4**: localizadores más bajos, comparados en el primer punto de diferencia. En los sustituyentes, la valencia libre recibe el localizador más bajo.
-- **P‑14.5**: orden alfanumérico. No se consideran di/tri ni sec‑/terc‑; sí se considera iso‑ y los multiplicadores dentro de un prefijo complejo.
-- **P‑16.3**: di…icosa para prefijos simples, con paréntesis cuando llevan localizador, por ejemplo `di(propan-2-il)`; bis/tris/tetrakis… para prefijos complejos, por ejemplo `bis(2-metilpropil)`; `di-terc-butil`.
-- **P‑16.5.4**: signos de inclusión anidados en el orden ( ) → [ ] → { }.
-- **P‑29 / P‑29.6**: prefijos sustituyentes preferidos; los complejos se nombran de forma recursiva.
-- **P‑14.3.4**: en un cicloalcano monosustituido se omite el localizador.
+```nginx
+location ~ ^/(lib|tests)/ { deny all; return 404; }
+```
 
 ## Validación realizada
 
-Con **OPSIN** (convierte nombre → estructura) y **RDKit** (compara el SMILES canónico), sobre los tres estilos en inglés:
+Con **OPSIN** (nombre → estructura) y **RDKit** (SMILES canónico), sobre los nombres en inglés en los estilos PIN, tradicional, 1979 y de clase funcional:
 
 | Prueba | Estructuras | Nombres | Discrepancias |
 |---|---|---|---|
-| `validar.py`: estructuras del generador, los 3 niveles (la mitad con halógenos) | 6000 | 18 000 | **0** |
-| `validar.py`: invariancia ante renumeración aleatoria de átomos | 3238 | 12 952 | **0** |
-| `arboles_aleatorios.py`: estructuras arbitrarias como las que puede dibujar un estudiante (árboles de 1–26 C y monociclos de 3–10 C, el 60 % con 1–5 halógenos) | 8222 | 24 666 | **0** |
-| Nombres radicofuncionales en inglés (PIN, retenido y sistemático) | 800 | 2400 | **0** |
+| `validar_org.py gen`: estructuras del generador, 3 niveles y combinaciones aleatorias de familias | 2995 | 9148 | **0** |
+| `aleatorias_org.py`: estructuras arbitrarias como las que dibujaría un estudiante (cadenas, un anillo o benceno, insaturaciones y 0–3 grupos), 4 semillas | 9000 | 27 207 | **0** |
+| Invariancia ante el orden de los átomos (SMILES aleatorios y Kekulé) | 7200 | — | **0** |
+| `esperados_es.tsv`: 44 compuestos de referencia con su nombre en español (aspirina, ibuprofeno, paracetamol, ácido cinámico…) | 44 | 44 | **0** |
+| `regresion_alcanos.php`: igualdad con el motor v3.0 (6 variantes por estructura) | 3000 | 18 000 | **0** |
 
 ```bash
 pip install rdkit pyopsin
 export OPSIN_JAR=$(python3 -c "import pyopsin,os;print(os.path.join(os.path.dirname(pyopsin.__file__),'opsin_cli.jar'))")
 cd tests
-python3 validar.py 2000
-python3 arboles_aleatorios.py 2000
+python3 validar_org.py gen 2000 1
+python3 aleatorias_org.py 2000 1
+php regresion_alcanos.php 1000
 ```
 
-OPSIN comprueba que cada nombre corresponde exactamente a la estructura. La elección de la cadena y de la numeración preferidas la garantiza la búsqueda exhaustiva del motor, que evalúa todas las cadenas candidatas y todas las numeraciones con los criterios anteriores.
+OPSIN comprueba que cada nombre corresponde exactamente a la estructura. La elección del nombre *preferido* la garantizan los criterios de la búsqueda exhaustiva del motor, que se comprobaron con los 44 casos de referencia.
 
-## Alcance y limitaciones
+## Alcance y limitaciones de la fase 1
 
-- Solo alcanos y haloalcanos saturados acíclicos (≤ 20 C en la cadena principal, ≤ 60 C en total) y cicloalcanos **monocíclicos** con sustituyentes alquilo o halógeno. No incluye estereoquímica (cis/trans, R/S): si se dibuja, se ignora. Tampoco incluye anillos múltiples ni heteroátomos distintos de los halógenos. No se usan nombres triviales como cloroformo o tetracloruro de carbono.
-- El estilo tradicional usa los criterios de 2013 para elegir la cadena principal. En casos muy poco frecuentes, los criterios adicionales de 1979 (C‑13.11: ramas más pequeñas con más carbonos, ramas menos ramificadas) podrían elegir otra cadena de igual longitud.
-- Los nombres en español siguen la traducción usual de los prefijos (metil, etil, terc‑butil, propan‑2‑il). El orden alfabético se calcula en cada idioma.
+- **Esqueleto**: cadenas de hasta 20 C, un anillo carbocíclico (3–20 C, saturado, insaturado o benceno) como estructura principal y cualquier número de anillos aislados como sustituyentes cuando la estructura principal es una cadena (`difenilmetanona`).
+- **Pendiente para la fase 2**: anillos fusionados (naftaleno, indano, tetralina, decalina), con puente (norbornano), espiro, ensamblajes (bifenilo) y nomenclatura multiplicativa (`1,1'-metilendibenceno`).
+- **Pendiente para la fase 3**: heterociclos (piridina, furano, lactonas), haluros de acilo, anhídridos, imidas, iminas, tioles y estereodescriptores E/Z y R/S (si se dibujan, se ignoran).
+- Con más de dos grupos del tipo –COOH, –CHO o –CN sobre una cadena acíclica, el programa usa prefijos carboxi, formil o ciano en lugar de la excepción P-65.1.2.2 (`propano-1,2,3-tricarboxílico`).
+- `acetileno` y `anisol` se usan solo sin sustituir. Sus derivados se nombran de forma sistemática (`1-metoxi-4-nitrobenceno`).
 
 ## Referencias
 
-- Favre, H. A.; Powell, W. H. *Nomenclature of Organic Chemistry. IUPAC Recommendations and Preferred Names 2013*. Cambridge: RSC, 2014. doi:10.1039/9781849733069
-- IUPAC. *Nomenclature of Organic Chemistry, Sections A, B, C, D, E, F and H* (1979 ed.). Oxford: Pergamon, 1979 (reglas A‑2.6, A‑2.25).
+- Favre, H. A.; Powell, W. H. *Nomenclature of Organic Chemistry. IUPAC Recommendations and Preferred Names 2013*. Cambridge: RSC, 2014. doi:10.1039/9781849733069 (versión en línea: iupac.qmul.ac.uk/BlueBook).
+- IUPAC. *Nomenclature of Organic Chemistry, Sections A–H* (1979). Oxford: Pergamon, 1979.
 - IUPAC. *A Guide to IUPAC Nomenclature of Organic Compounds (Recommendations 1993)*. Oxford: Blackwell, 1993.
 - Bienfait, B.; Ertl, P. JSME: a free molecule editor in JavaScript. *J. Cheminform.* 2013, 5, 24. doi:10.1186/1758-2946-5-24
 - Lowe, D. M. et al. Chemical name to structure: OPSIN. *J. Chem. Inf. Model.* 2011, 51, 739–753. doi:10.1021/ci100384d
