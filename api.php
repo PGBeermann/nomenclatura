@@ -119,8 +119,9 @@ function crearEjercicio(MolOrg $mol, bool $propio): array
             . 'y expresan el doble enlace externo con un prefijo «-ilideno».';
     }
 
+    // numeración para JSME: los mapas de átomo solo admiten enteros (4a, 8a y los localizadores con prima no se dibujan)
     $mapas = [];
-    foreach ($pin['cadena'] as $i => $a) { $mapas[$a] = $i + 1; }
+    foreach ($pin['mapa'] as $a => $l) { if (is_int($l)) { $mapas[$a] = $l; } }
     $inicio = $pin['cadena'][0];
 
     $id = bin2hex(random_bytes(8));
