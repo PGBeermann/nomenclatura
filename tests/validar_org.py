@@ -1,6 +1,7 @@
 # Validación nombre→estructura con OPSIN y RDKit para el motor IupacOrganica.
 import subprocess, sys, os
 from rdkit import Chem
+from rdkit.Chem import rdMolDescriptors
 from rdkit import RDLogger; RDLogger.DisableLog('rdApp.*')
 JAR = os.environ.get('OPSIN_JAR', 'opsin_cli.jar')
 def opsin(names):
@@ -10,6 +11,16 @@ def opsin(names):
 def can(s):
     m = Chem.MolFromSmiles(s) if s else None
     return Chem.MolToSmiles(m) if m else None
+def esqueleto(s):
+    # grafo con recuento de H, sin órdenes de enlace: iguala isómeros de desplazamiento de enlaces
+    # (pentaleno, heptaleno: el nombre IUPAC no distingue estructuras de Kekulé)
+    m = Chem.MolFromSmiles(s) if s else None
+    if m is None: return None
+    rw = Chem.RWMol(m)
+    for a in rw.GetAtoms(): a.SetNumExplicitHs(a.GetTotalNumHs()); a.SetNoImplicit(True); a.SetIsAromatic(False)
+    for b in rw.GetBonds(): b.SetBondType(Chem.BondType.SINGLE); b.SetIsAromatic(False)
+    return Chem.MolToSmiles(rw.GetMol(), canonical=True)
+DESPLAZ = [0]
 def validar(filas, cols, etiquetas):
     names = [f[c] for c in cols for f in filas]
     idx = [(i, c) for c in cols for i in range(len(filas))]
@@ -19,6 +30,8 @@ def validar(filas, cols, etiquetas):
         if not nm: continue
         n += 1
         if can(got) != can(filas[i][0]):
+            if got and esqueleto(got) == esqueleto(filas[i][0]) and Chem.rdMolDescriptors.CalcMolFormula(Chem.MolFromSmiles(got)) == Chem.rdMolDescriptors.CalcMolFormula(Chem.MolFromSmiles(filas[i][0])):
+                DESPLAZ[0] += 1; continue
             bad += 1; print('MISMATCH', etiquetas[c], filas[i][0], '|', nm, '|', got)
     return n, bad
 if __name__ == '__main__':
@@ -37,4 +50,4 @@ if __name__ == '__main__':
             if f[0] == 'ERR': print('ERR', s, f[1]); continue
             filas.append([s, f[0], f[2], f[3], f[4], f[1]])
     n, bad = validar(filas, [1, 2, 3, 4], {1: 'pin', 2: 'trad', 3: 'sis79', 4: 'clase'})
-    print('estructuras', len(filas), 'nombres', n, 'discrepancias', bad)
+    print('estructuras', len(filas), 'nombres', n, 'discrepancias', bad, '(isómeros de desplazamiento de enlaces aceptados:', DESPLAZ[0], ')')
