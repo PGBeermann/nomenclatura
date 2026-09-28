@@ -1,6 +1,6 @@
 <?php
 /**
- * IupacOrganica.php  ·  v4.0 (fase 1)
+ * IupacOrganica.php  ·  v4.1 (fases 1 y 2)
  * Motor de nomenclatura sustitutiva IUPAC para compuestos orgánicos con un
  * esqueleto carbonado acíclico o monocíclico (cicloalcanos, cicloalquenos y
  * benceno) y los grupos característicos más frecuentes en la enseñanza:
@@ -20,9 +20,13 @@
  *     P-61 (halógenos, nitro) · P-62 aminas · P-63 alcoholes, fenoles, éteres
  *     P-64 cetonas · P-65 ácidos y ésteres · P-66 amidas, nitrilos, aldehídos
  *
+ * Fase 2: sistemas de dos anillos — fusionados con nombre retenido (P-25: pentaleno,
+ * indeno, azuleno, naftaleno, heptaleno) con hidrógeno indicado, añadido y prefijos hidro
+ * (P-14.7, P-31.1.4.2.4); von Baeyer (P-23.2); espiro (P-24.2); ensamblajes (P-28);
+ * nomenclatura multiplicativa (P-15.3); antigüedad de anillos (P-44.2, P-44.4).
+ *
  * El motor calcula los nombres a partir del grafo molecular (no los memoriza).
- * Anillos fusionados, con puente o espiro, ensamblajes de anillos idénticos y
- * heterociclos se rechazan con un mensaje didáctico (fases 2 y 3).
+ * Los sistemas de tres o más anillos y los heterociclos se rechazan con un mensaje didáctico.
  *
  * Requiere PHP >= 7.4.  UNACHI · Facultad de Ciencias Naturales y Exactas · Escuela de Química.
  */
@@ -54,6 +58,7 @@ final class MolOrg
         $this->arom[$this->n] = $arom;
         $this->carga[$this->n] = $carga;
         $this->adj[$this->n] = [];
+        $this->cacheSis = null;
         return $this->n++;
     }
 
@@ -61,6 +66,7 @@ final class MolOrg
     {
         $this->adj[$a][$b] = $o;
         $this->adj[$b][$a] = $o;
+        $this->cacheSis = null;
     }
 
     public function orden(int $a, int $b): int { return $this->adj[$a][$b] ?? 0; }
@@ -224,19 +230,21 @@ final class MolOrg
         return $o === 2 && $c === 1;
     }
 
-    /* ---------------- anillos ---------------- */
+    /* ---------------- sistemas de anillos ---------------- */
 
-    /** @var array<int,int[]>|null anillos (lista ordenada de átomos) */
-    private ?array $cacheAnillos = null;
+    private ?array $cacheSis = null;
 
     /**
-     * Devuelve los anillos simples (monociclos aislados) como listas ordenadas de átomos.
-     * Lanza excepción didáctica para sistemas fusionados, con puente, espiro o heterocíclicos.
+     * Sistemas de anillos (fase 2): monociclos, biciclos (fusionados o con puente) y espiro de dos anillos.
+     * Cada sistema: ['tipo' => mono|bic|espiro, 'atomos' => int[], 'aristas' => [[a,b]…], y además
+     *   mono:   'ciclo'   => átomos en orden;
+     *   bic:    'cabezas' => [h1, h2], 'puentes' => tres listas de átomos interiores ordenadas de h1 a h2;
+     *   espiro: 'espiro'  => átomo espiro, 'ciclos' => dos ciclos ordenados que empiezan en el átomo espiro.
+     * Lanza excepción didáctica para heterociclos y sistemas de tres o más anillos.
      */
-    public function anillos(): array
+    public function sistemas(): array
     {
-        if ($this->cacheAnillos !== null) { return $this->cacheAnillos; }
-        // componentes biconexas (Tarjan, por aristas)
+        if ($this->cacheSis !== null) { return $this->cacheSis; }
         $disc = []; $low = []; $t = 0; $pilaE = []; $comps = [];
         $dfs = function (int $u, int $p) use (&$dfs, &$disc, &$low, &$t, &$pilaE, &$comps): void {
             $disc[$u] = $low[$u] = ++$t;
@@ -258,43 +266,140 @@ final class MolOrg
             }
         };
         for ($a = 0; $a < $this->n; $a++) { if (!isset($disc[$a])) { $dfs($a, -1); } }
-        $anillos = []; $enAnillo = [];
+        $cic = [];
         foreach ($comps as $c) {
-            $v = [];
-            foreach ($c as [$x, $y]) { $v[$x] = true; $v[$y] = true; }
-            $nE = count($c); $nV = count($v);
-            if ($nE < 3) { continue; }                      // puente acíclico
-            if ($nE > $nV) {
-                throw new NomenclaturaException('La estructura tiene anillos fusionados o con puente (naftaleno, indano, decalina, norbornano…). Estos sistemas bicíclicos se incorporarán en la fase 2.');
-            }
-            foreach (array_keys($v) as $a) {
+            $V = [];
+            foreach ($c as [$x, $y]) { $V[$x] = true; $V[$y] = true; }
+            $nE = count($c); $nV = count($V);
+            if ($nE < 3) { continue; }                       // enlace acíclico
+            foreach (array_keys($V) as $a) {
                 if ($this->el[$a] !== 'C') {
                     throw new NomenclaturaException('El anillo contiene un heteroátomo (' . $this->el[$a] . '): es un heterociclo (lactona, lactama, éter cíclico, amina cíclica…). Los heterociclos se incorporarán en la fase 3.');
                 }
-                if (isset($enAnillo[$a])) {
-                    throw new NomenclaturaException('Dos anillos comparten un átomo (compuesto espiro). Los compuestos espiro se incorporarán en la fase 2.');
-                }
-                $enAnillo[$a] = true;
             }
-            // ordenar el ciclo
-            $ini = array_key_first($v); $orden = [$ini]; $prev = -1; $act = $ini;
-            while (true) {
-                $sig = -1;
-                foreach ($this->adj[$act] as $b => $o) { if (isset($v[$b]) && $b !== $prev) { $sig = $b; break; } }
-                if ($sig === $ini || $sig === -1) { break; }
-                $orden[] = $sig; $prev = $act; $act = $sig;
+            if ($nE > $nV + 1) {
+                throw new NomenclaturaException('La estructura tiene un sistema de tres o más anillos (antraceno, fenantreno, adamantano, esteroides…). Por ahora el programa admite hasta dos anillos por sistema.');
             }
-            $anillos[] = $orden;
+            $cic[] = ['V' => $V, 'E' => $c, 'nE' => $nE, 'nV' => $nV];
         }
-        return $this->cacheAnillos = $anillos;
+        // agrupar componentes que comparten un átomo (espiro)
+        $grupo = range(0, max(0, count($cic) - 1));
+        $raizG = function (int $i) use (&$grupo, &$raizG): int { return $grupo[$i] === $i ? $i : ($grupo[$i] = $raizG($grupo[$i])); };
+        $duenio = [];
+        foreach ($cic as $i => $c) {
+            foreach (array_keys($c['V']) as $a) {
+                if (isset($duenio[$a])) { $grupo[$raizG($i)] = $raizG($duenio[$a]); } else { $duenio[$a] = $i; }
+            }
+        }
+        $grupos = [];
+        foreach ($cic as $i => $c) { $grupos[$raizG($i)][] = $i; }
+        $sis = [];
+        foreach ($grupos as $miembros) {
+            if (count($miembros) === 1) {
+                $c = $cic[$miembros[0]];
+                $sis[] = $c['nE'] === $c['nV'] ? $this->sistemaMono($c) : $this->sistemaBic($c);
+            } elseif (count($miembros) === 2 && $cic[$miembros[0]]['nE'] === $cic[$miembros[0]]['nV'] && $cic[$miembros[1]]['nE'] === $cic[$miembros[1]]['nV']) {
+                $A = $this->sistemaMono($cic[$miembros[0]]); $B = $this->sistemaMono($cic[$miembros[1]]);
+                $com = array_values(array_intersect($A['atomos'], $B['atomos']));
+                if (count($com) !== 1) { throw new NomenclaturaException('Sistema de anillos no admitido.'); }
+                $s0 = $com[0];
+                $rot = function (array $ciclo) use ($s0): array { $i = array_search($s0, $ciclo, true); return array_merge(array_slice($ciclo, $i), array_slice($ciclo, 0, $i)); };
+                $sis[] = ['tipo' => 'espiro', 'atomos' => array_values(array_unique(array_merge($A['atomos'], $B['atomos']))),
+                    'aristas' => array_merge($A['aristas'], $B['aristas']), 'espiro' => $s0, 'ciclos' => [$rot($A['ciclo']), $rot($B['ciclo'])]];
+            } else {
+                throw new NomenclaturaException('La estructura tiene un sistema de más de dos anillos unidos en espiro o combinados con puentes. Por ahora el programa admite hasta dos anillos por sistema.');
+            }
+        }
+        return $this->cacheSis = $sis;
     }
 
-    /** Convierte anillos de 6 C con enlaces alternos (Kekulé) en benceno aromático y valida la aromaticidad. */
+    private function sistemaMono(array $c): array
+    {
+        $V = $c['V'];
+        $ini = array_key_first($V); $orden = [$ini]; $prev = -1; $act = $ini;
+        while (true) {
+            $sig = -1;
+            foreach ($this->adj[$act] as $b => $o) { if (isset($V[$b]) && $b !== $prev) { $sig = $b; break; } }
+            if ($sig === $ini || $sig === -1) { break; }
+            $orden[] = $sig; $prev = $act; $act = $sig;
+        }
+        $ar = [];
+        $N = count($orden);
+        for ($i = 0; $i < $N; $i++) { $ar[] = [$orden[$i], $orden[($i + 1) % $N]]; }
+        return ['tipo' => 'mono', 'atomos' => $orden, 'aristas' => $ar, 'ciclo' => $orden];
+    }
+
+    private function sistemaBic(array $c): array
+    {
+        $V = $c['V'];
+        $vec = [];
+        foreach ($c['E'] as [$x, $y]) { $vec[$x][] = $y; $vec[$y][] = $x; }
+        $cab = array_values(array_filter(array_keys($V), fn($a) => count($vec[$a]) === 3));
+        if (count($cab) !== 2) { throw new NomenclaturaException('Sistema bicíclico no reconocido.'); }
+        [$h1, $h2] = $cab;
+        $puentes = [];
+        foreach ($vec[$h1] as $n) {
+            $ruta = []; $prev = $h1; $act = $n;
+            while ($act !== $h2) {
+                $ruta[] = $act;
+                $sig = null;
+                foreach ($vec[$act] as $w) { if ($w !== $prev) { $sig = $w; } }
+                $prev = $act; $act = $sig;
+            }
+            $puentes[] = $ruta;
+        }
+        return ['tipo' => 'bic', 'atomos' => array_keys($V), 'aristas' => $c['E'], 'cabezas' => [$h1, $h2], 'puentes' => $puentes];
+    }
+
+    /** Ciclos elementales (lista de átomos ordenados) de todos los sistemas. */
+    public function anillos(): array
+    {
+        $r = [];
+        foreach ($this->sistemas() as $s) {
+            if ($s['tipo'] === 'mono') { $r[] = $s['ciclo']; }
+            elseif ($s['tipo'] === 'espiro') { $r[] = $s['ciclos'][0]; $r[] = $s['ciclos'][1]; }
+            else {
+                [$h1, $h2] = $s['cabezas']; $P = $s['puentes'];
+                for ($i = 0; $i < 3; $i++) {
+                    for ($j = $i + 1; $j < 3; $j++) { $r[] = array_merge([$h1], $P[$i], [$h2], array_reverse($P[$j])); }
+                }
+            }
+        }
+        return $r;
+    }
+
+    /**
+     * Emparejamientos perfectos (estructuras de Kekulé) de un conjunto de átomos usando las aristas dadas.
+     * @return array<int,array<int,array{0:int,1:int}>> hasta $limite emparejamientos
+     */
+    public static function emparejamientos(array $atomos, array $aristas, int $limite = 64): array
+    {
+        $vec = [];
+        foreach ($atomos as $a) { $vec[$a] = []; }
+        foreach ($aristas as [$x, $y]) { if (isset($vec[$x], $vec[$y])) { $vec[$x][] = $y; $vec[$y][] = $x; } }
+        $res = [];
+        $rec = function (array $libres, array $acc) use (&$rec, &$res, $vec, $limite): void {
+            if (count($res) >= $limite) { return; }
+            if (!$libres) { $res[] = $acc; return; }
+            $a = array_key_first($libres);
+            foreach ($vec[$a] as $b) {
+                if (!isset($libres[$b])) { continue; }
+                $l2 = $libres; unset($l2[$a], $l2[$b]);
+                $rec($l2, array_merge($acc, [[$a, $b]]));
+            }
+        };
+        $rec(array_fill_keys($atomos, true), []);
+        return $res;
+    }
+
+    /** Percepción de aromaticidad: benceno de Kekulé → aromático; validación del subgrafo aromático. */
     private function perceibirAromaticidad(): void
     {
-        $this->cacheAnillos = null;
-        $anillos = $this->anillos();
-        foreach ($anillos as $r) {
+        $this->cacheSis = null;
+        $sis = $this->sistemas();
+        foreach ($sis as $sm) {
+            if ($sm['tipo'] !== 'mono') { continue; }           // solo el benceno aislado se trata como aromático
+            $r = $sm['ciclo'];
             $N = count($r);
             if ($N !== 6) { continue; }
             $dobles = 0; $alterna = true; $todosArom = true;
@@ -306,7 +411,6 @@ final class MolOrg
                 if ($o === 2 && $o2 === 2) { $alterna = false; }
             }
             if (!$todosArom && $dobles === 3 && $alterna) {
-                // no debe haber dobles enlaces exocíclicos
                 $ok = true;
                 foreach ($r as $a) {
                     foreach ($this->adj[$a] as $b => $o) { if (!in_array($b, $r, true) && $o >= 2) { $ok = false; } }
@@ -317,24 +421,32 @@ final class MolOrg
                 }
             }
         }
-        // todo átomo o enlace aromático debe pertenecer a un anillo bencénico completo
-        $enBenceno = [];
-        foreach ($anillos as $r) {
-            $N = count($r); $ok = $N === 6;
-            for ($i = 0; $i < $N && $ok; $i++) { if ($this->orden($r[$i], $r[($i + 1) % $N]) !== self::AROM) { $ok = false; } }
-            if ($ok) { foreach ($r as $a) { $enBenceno[$a] = true; } }
-        }
+        // cada átomo aromático debe pertenecer a un sistema de anillos y el conjunto debe ser kekulizable
+        $sisDe = [];
+        foreach ($sis as $k => $s) { foreach ($s['atomos'] as $a) { $sisDe[$a] = $k; } }
         foreach ($this->arom as $a => $ar) {
-            if ($ar && !isset($enBenceno[$a])) {
-                throw new NomenclaturaException('Hay átomos aromáticos que no forman un anillo de benceno aislado. Por ahora solo se admite el benceno como anillo aromático.');
-            }
-            if (!$ar) {
-                foreach ($this->adj[$a] as $b => $o) {
-                    if ($o === self::AROM) { throw new NomenclaturaException('Enlace aromático fuera de un anillo de benceno.'); }
+            foreach ($this->adj[$a] as $b => $o) {
+                if ($o === self::AROM && (!isset($sisDe[$a], $sisDe[$b]) || $sisDe[$a] !== $sisDe[$b])) {
+                    throw new NomenclaturaException('Enlace aromático fuera de un anillo.');
                 }
             }
+            if ($ar && !isset($sisDe[$a])) { throw new NomenclaturaException('Hay átomos aromáticos fuera de un anillo.'); }
         }
-        $this->cacheAnillos = null;
+        foreach ($sis as $s) {
+            $ar = array_values(array_filter($s['atomos'], fn($a) => $this->arom[$a]));
+            if (!$ar) { continue; }
+            $ars = array_values(array_filter($s['aristas'], fn($e) => $this->orden($e[0], $e[1]) === self::AROM));
+            $k = self::emparejamientos($ar, $ars, 1);
+            if (!$k) { throw new NomenclaturaException('El anillo aromático dibujado no es válido (no admite una estructura de Kekulé).'); }
+            // salvo el benceno aislado, los sistemas aromáticos (naftaleno, azuleno, benzociclobuteno,
+            // ciclooctatetraeno…) se representan con su estructura de Kekulé explícita
+            if (!($s['tipo'] === 'mono' && count($s['atomos']) === 6)) {
+                foreach ($ars as [$x, $y]) { $this->enlazar($x, $y, 1); }
+                foreach ($k[0] as [$x, $y]) { $this->enlazar($x, $y, 2); }
+                foreach ($ar as $a) { $this->arom[$a] = false; }
+            }
+        }
+        $this->cacheSis = null;
     }
 
     /* ---------------- salida ---------------- */
@@ -465,9 +577,12 @@ final class IupacOrganica
     private array $fc = [];
     /** @var array<int,int> carbonos de aldehído => carbono de anclaje (-1 si no hay) */
     private array $ald = [];
-    /** @var array<int,int> átomo => índice de anillo */
+    /** @var array<int,int> átomo => índice del sistema de anillos */
     private array $anilloDe = [];
-    private array $anillos = [];
+    /** @var array<int,array> sistemas de anillos (MolOrg::sistemas) */
+    private array $sistemas = [];
+    /** @var array<int,array> caché de numeraciones y datos de nomenclatura por sistema */
+    private array $infoSis = [];
     private ?string $principal = null;
     /** @var array<string,int> clases presentes (incluye éter, halógeno, nitro, insaturaciones) */
     public array $clases = [];
@@ -480,8 +595,8 @@ final class IupacOrganica
         $this->mol = $mol;
         $this->lang = $lang;
         $this->estilo = $estilo;
-        $this->anillos = $mol->anillos();
-        foreach ($this->anillos as $i => $r) { foreach ($r as $a) { $this->anilloDe[$a] = $i; } }
+        $this->sistemas = $mol->sistemas();
+        foreach ($this->sistemas as $i => $r) { foreach ($r['atomos'] as $a) { $this->anilloDe[$a] = $i; } }
         $this->clasificar();
     }
 
@@ -547,6 +662,30 @@ final class IupacOrganica
         'dichloromethane' => [['cloruro de metileno'], ['methylene chloride']],
         'prop-2-enal' => [['acroleína'], ['acrolein']],
         'prop-2-enenitrile' => [['acrilonitrilo'], ['acrylonitrile']],
+        // fase 2: sistemas de dos anillos
+        'naphthalen-1-ol' => [['1-naftol', 'α-naftol'], ['1-naphthol']],
+        'naphthalen-2-ol' => [['2-naftol', 'β-naftol'], ['2-naphthol']],
+        'naphthalene-1-carboxylic acid' => [['ácido 1-naftoico'], ['1-naphthoic acid']],
+        'naphthalene-2-carboxylic acid' => [['ácido 2-naftoico'], ['2-naphthoic acid']],
+        'naphthalene-1,4-dione' => [['1,4-naftoquinona'], ['1,4-naphthoquinone']],
+        'decahydronaphthalene' => [['decalina'], ['decalin']],
+        '1,2,3,4-tetrahydronaphthalene' => [['tetralina'], ['tetralin']],
+        '3,4-dihydronaphthalen-1(2H)-one' => [['1-tetralona', 'α-tetralona'], ['1-tetralone']],
+        '2,3-dihydro-1H-indene' => [['indano'], ['indane']],
+        '2,3-dihydro-1H-inden-1-one' => [['1-indanona'], ['1-indanone']],
+        'bicyclo[2.2.1]heptane' => [['norbornano'], ['norbornane']],
+        'bicyclo[2.2.1]hept-2-ene' => [['norborneno'], ['norbornene']],
+        '1,7,7-trimethylbicyclo[2.2.1]heptan-2-one' => [['alcanfor'], ['camphor']],
+        'bicyclo[4.2.0]octa-1,3,5-triene' => [['benzociclobuteno'], ['benzocyclobutene']],
+        "1,1'-biphenyl" => [['bifenilo'], ['biphenyl']],
+        "1,1'-bi(cyclohexane)" => [['biciclohexilo'], ['bicyclohexyl']],
+        "1,1'-methylenedibenzene" => [['difenilmetano'], ['diphenylmethane']],
+        "1,1'-oxydibenzene" => [['difenil éter', 'éter difenílico'], ['diphenyl ether']],
+        "1,1'-(ethane-1,2-diyl)dibenzene" => [['bibencilo', '1,2-difeniletano'], ['bibenzyl', '1,2-diphenylethane']],
+        "4,4'-(propane-2,2-diyl)diphenol" => [['bisfenol A'], ['bisphenol A']],
+        "4,4'-methylenedianiline" => [["4,4'-diaminodifenilmetano"], ["4,4'-diaminodiphenylmethane"]],
+        "[1,1'-binaphthalene]-2,2'-diol" => [['BINOL'], ['BINOL']],
+        'N-phenylaniline' => [['difenilamina'], ['diphenylamine']],
     ];
 
     /* ======================= clasificación de grupos ======================= */
@@ -757,7 +896,7 @@ final class IupacOrganica
     {
         $vocal = $this->es() ? 'aeiouáéíóú' : 'aeiouy';
         $fin = $this->es() ? 'o' : 'e';
-        return preg_replace_callback('/§([\-\d,]*)(.?)/u', function ($m) use ($vocal, $fin) {
+        return preg_replace_callback("/§((?:[\\-\\d,']|(?<=\\d)[a-z]|\\(\\d+[a-z]?'*H(?:,\\d+[a-z]?'*H)*\\))*)(.?)/u", function ($m) use ($vocal, $fin) {
             $sig = $m[2];
             if ($sig === '' || mb_strpos($vocal, mb_strtolower($sig)) === false) { return $fin . $m[1] . $sig; }
             return $m[1] . $sig;
@@ -768,9 +907,32 @@ final class IupacOrganica
     {
         $n = min(count($x), count($y));
         for ($i = 0; $i < $n; $i++) {
-            if ($x[$i] !== $y[$i]) { return $x[$i] <=> $y[$i]; }
+            $a = self::v($x[$i]); $b = self::v($y[$i]);
+            if ($a !== $b) { return $a <=> $b; }
         }
         return count($x) <=> count($y);
+    }
+
+    /**
+     * Valor numérico de un localizador para compararlo (P-31.1.4): 4 < 4a < 5; 1 < 1' < 2;
+     * localizador compuesto 1(6) > 1. Los localizadores N se excluyen (−1).
+     */
+    private static function v($l): float
+    {
+        if (is_int($l)) { return (float)$l; }
+        if (preg_match("/^(\\d+)([a-z]?)('*)(?:\\((\\d+)\\))?$/", (string)$l, $mm)) {
+            return (int)$mm[1] + ($mm[2] !== '' ? 0.5 : 0) + 0.01 * strlen($mm[3]) + (isset($mm[4]) ? 0.0001 * (int)$mm[4] : 0);
+        }
+        return -1.0;
+    }
+
+    /** Localizador de nitrógeno (N, N1, N'…). */
+    private static function esN($l): bool { return is_string($l) && $l !== '' && $l[0] === 'N'; }
+
+    private static function ordenarLocs(array $l): array
+    {
+        usort($l, fn($a, $b) => self::v($a) <=> self::v($b));
+        return $l;
     }
 
     /* ======================= evaluación de una cadena o anillo ======================= */
@@ -790,9 +952,12 @@ final class IupacOrganica
         $en = array_flip($pos);
         $N = count($pos);
         $subs = []; $princ = []; $mult = []; $dob = []; $trip = []; $invalido = false;
+        $locsOp = $op['locs'] ?? null;
+        $aristasOp = $op['aristas'] ?? null;
+        $ordenes = $op['ordenes'] ?? [];
         for ($i = 0; $i < $N; $i++) {
-            $a = $pos[$i]; $L = $i + 1;
-            if ($i < $N - 1 || ($anillo && $N > 2)) {
+            $a = $pos[$i]; $L = $locsOp !== null ? $locsOp[$i] : $i + 1;
+            if ($aristasOp === null && ($i < $N - 1 || ($anillo && $N > 2))) {
                 $b = $pos[($i + 1) % $N];
                 $o = $m->orden($a, $b);
                 $locB = ($i === $N - 1) ? $N : $L;
@@ -884,9 +1049,20 @@ final class IupacOrganica
                 }
             }
         }
-        sort($mult); sort($dob); sort($trip);
-        $pl = array_map(fn($p) => $p['loc'], $princ);
-        sort($pl);
+        if ($aristasOp !== null) {                  // enlaces múltiples de un sistema de anillos
+            foreach ($aristasOp as [$i, $j]) {
+                $x = $pos[$i]; $y = $pos[$j];
+                $o = $ordenes[min($x, $y) . '-' . max($x, $y)] ?? $m->orden($x, $y);
+                if ($o !== 2 && $o !== 3) { continue; }
+                $li = $locsOp[$i]; $lj = $locsOp[$j];
+                if (self::v($li) > self::v($lj)) { [$li, $lj] = [$lj, $li]; }
+                $lb = (is_int($li) && is_int($lj) && $lj - $li === 1) ? $li : $li . '(' . $lj . ')';
+                $mult[] = $lb;
+                if ($o === 2) { $dob[] = $lb; } else { $trip[] = $lb; }
+            }
+        }
+        $mult = self::ordenarLocs($mult); $dob = self::ordenarLocs($dob); $trip = self::ordenarLocs($trip);
+        $pl = self::ordenarLocs(array_map(fn($p) => $p['loc'], $princ));
         return ['pos' => $pos, 'subs' => $subs, 'princ' => $princ, 'plocs' => $pl, 'mlocs' => $mult, 'dlocs' => $dob,
             'tlocs' => $trip, 'mn' => count($mult), 'dn' => count($dob), 'anillo' => $anillo, 'len' => $N, 'invalido' => $invalido];
     }
@@ -907,23 +1083,23 @@ final class IupacOrganica
         $partes = []; $citados = []; $locs = [];
         foreach ($grupos as $nm => $g) {
             usort($g['locs'], function ($x, $y) {
-                $xs = is_string($x); $ys = is_string($y);
+                $xs = self::esN($x); $ys = self::esN($y);
                 if ($xs !== $ys) { return $xs ? -1 : 1; }
-                return $xs ? strnatcmp($x, $y) : $x <=> $y;
+                return $xs ? strnatcmp($x, $y) : self::v($x) <=> self::v($y);
             });
             $cnt = count($g['locs']);
             $info = $g['info'];
-            foreach ($g['locs'] as $l) { if (is_int($l)) { $citados[] = $l; $locs[] = $l; } }
+            foreach ($g['locs'] as $l) { if (!self::esN($l)) { $citados[] = $l; $locs[] = $l; } }
             $paren = $info['tipo'] !== 'simple';
             if ($cnt === 1) { $mult = ''; }
             elseif ($info['tipo'] === 'complejo') { $mult = self::MULT_COMPLEJO[$cnt] ?? ('(' . $cnt . ')'); }
             else { $mult = self::MULT_SIMPLE[$cnt]; }
             if ($mult !== '' && !$paren && preg_match('/^(sec|terc|tert)-/', $nm)) { $mult .= '-'; }
             $txt = $mult . ($paren ? self::encerrar($nm) : $nm);
-            $locTxt = array_filter($g['locs'], fn($l) => is_string($l) || !$omitirLoc);
+            $locTxt = array_filter($g['locs'], fn($l) => self::esN($l) || !$omitirLoc);
             $partes[] = [$locTxt ? implode(',', $locTxt) . '-' : '', $txt];
         }
-        sort($locs);
+        $locs = self::ordenarLocs($locs);
         $pref = '';
         $atomicos = '/^(di|tri|tetra|penta|hexa)?(fluoro|chloro|cloro|bromo|iodo|yodo|nitro|oxo|hydroxy|hidroxi|cyano|ciano|carboxy|carboxi|formyl|formil|amino)$/';
         foreach ($partes as [$lt, $txt]) {
@@ -935,27 +1111,38 @@ final class IupacOrganica
             $pref .= ($pref !== '' && $lt !== '' ? '-' : '') . $lt . $txt;
         }
         return ['prefijos' => $pref, 'locs' => $locs, 'citados' => $citados, 'grupos' => $grupos,
-            'cuenta' => count(array_filter($subs, fn($s) => is_int($s['loc'])))];
+            'cuenta' => count(array_filter($subs, fn($s) => !self::esN($s['loc'])))];
     }
 
     /** Compara dos candidatos. Devuelve [signo, criterio]. */
     private function comparar(array $a, array $b, ?array $seq = null): array
     {
-        $seq = $seq ?? ($this->estilo === 'pin'
-            ? ['pn', 'anillo', 'len', 'mn', 'dn', 'plocs', 'mlocs', 'dlocs', 'cuenta', 'locs', 'citados', 'nombre']
-            : ['pn', 'anillo', 'mn', 'dn', 'len', 'plocs', 'mlocs', 'dlocs', 'cuenta', 'locs', 'citados', 'nombre']);
+        $seq = $seq ?? $this->secuencia();
         foreach ($seq as $k) {
             switch ($k) {
                 case 'pn': $c = count($b['princ']) <=> count($a['princ']); break;
                 case 'anillo': $c = (int)$b['anillo'] <=> (int)$a['anillo']; break;
-                case 'len': case 'mn': case 'dn': case 'cuenta': $c = $b[$k] <=> $a[$k]; break;
-                case 'plocs': case 'mlocs': case 'dlocs': case 'locs': case 'citados': $c = self::cmpLocs($a[$k], $b[$k]); break;
+                case 'len': case 'mn': case 'dn': case 'cuenta': case 'nr': case 'insat': $c = ($b[$k] ?? 0) <=> ($a[$k] ?? 0); break;
+                case 'plocs': case 'mlocs': case 'dlocs': case 'locs': case 'citados':
+                case 'ilocs': case 'alocs': case 'hlocs': case 'union':
+                    $c = self::cmpLocs($a[$k] ?? [], $b[$k] ?? []); break;
                 case 'nombre': $c = strcmp($a['nombreCmp'], $b['nombreCmp']); $c = $c <=> 0; break;
                 default: $c = 0;
             }
             if ($c !== 0) { return [$c, $k]; }
         }
         return [0, ''];
+    }
+
+    /**
+     * Orden de los criterios: selección de la estructura principal (P-44.1, P-44.2, P-44.3, P-44.4)
+     * y numeración (P-31.1.4): hidrógeno indicado → grupo principal/valencia libre → punto de unión
+     * (multiplicativa) → hidrógeno añadido → hidro → enlaces múltiples → prefijos.
+     */
+    private function secuencia(): array
+    {
+        $sel = $this->estilo === 'pin' ? ['pn', 'anillo', 'nr', 'len', 'insat', 'mn', 'dn'] : ['pn', 'anillo', 'nr', 'mn', 'dn', 'len', 'insat'];
+        return array_merge($sel, ['ilocs', 'plocs', 'union', 'alocs', 'hlocs', 'mlocs', 'dlocs', 'cuenta', 'locs', 'citados', 'nombre']);
     }
 
     /* ======================= sustituyentes ======================= */
@@ -969,7 +1156,7 @@ final class IupacOrganica
         $k = "$r|$p|$ord";
         if (isset($this->memo[$k])) { return $this->memo[$k]; }
         if (isset($this->fc[$r])) { return $this->memo[$k] = $this->prefijoFC($r, $p); }
-        if (isset($this->anilloDe[$r])) { return $this->memo[$k] = $this->sustAnillo($r, $p, $ord); }
+        if (isset($this->anilloDe[$r])) { return $this->memo[$k] = $this->sustSistema($r, $p, $ord); }
         $m = $this->mol;
         if ($ord === 1) {
             foreach ($m->adj[$r] as $x => $o) {
@@ -1090,37 +1277,332 @@ final class IupacOrganica
         return $this->info($nombre, preg_match('/\d/', $base) ? 'compuesto' : 'simple', $n);
     }
 
-    /** Anillo como sustituyente: fenil, ciclohexil, ciclohex-2-en-1-il, 4-metilfenil… */
-    private function sustAnillo(int $r, int $p, int $ord): array
+    /* ======================= sistemas de anillos (fase 2) ======================= */
+
+    /** Hidruros fusionados con nombre retenido (P-25.1.1): tamaños → [inglés, español, perímetro desde C1, átomos de fusión]. */
+    private const FUSIONADOS = [
+        '5,5' => ['pentalen', 'pentalen', [1, 2, 3, '3a', 4, 5, 6, '6a'], ['3a', '6a']],
+        '5,6' => ['inden', 'inden', [1, 2, 3, '3a', 4, 5, 6, 7, '7a'], ['3a', '7a']],
+        '5,7' => ['azulen', 'azulen', [1, 2, 3, '3a', 4, 5, 6, 7, 8, '8a'], ['3a', '8a']],
+        '6,6' => ['naphthalen', 'naftalen', [1, 2, 3, 4, '4a', 5, 6, 7, 8, '8a'], ['4a', '8a']],
+        '7,7' => ['heptalen', 'heptalen', [1, 2, 3, 4, 5, '5a', 6, 7, 8, 9, 10, '10a'], ['5a', '10a']],
+    ];
+
+    /**
+     * Datos de nomenclatura de un sistema: clase (mono|fus|vb|espiro), numeraciones válidas
+     * (pos, locs, aristas como pares de índices), plantilla o descriptor entre corchetes.
+     */
+    private function datosSistema(int $k): array
     {
-        $ring = $this->anillos[$this->anilloDe[$r]];
-        $N = count($ring);
-        $i0 = array_search($r, $ring, true);
-        $arom = $this->mol->arom[$r];
-        $cands = [];
-        foreach ([1, -1] as $dir) {
-            $pos = [];
-            for ($i = 0; $i < $N; $i++) { $pos[] = $ring[(($i0 + $dir * $i) % $N + $N) % $N]; }
-            $d = $this->evaluar($pos, ['anillo' => true, 'excluir' => [$p => true]]);
-            if ($arom) { $d['mlocs'] = $d['dlocs'] = $d['tlocs'] = []; $d['mn'] = $d['dn'] = 0; }
-            $d['plocs'] = [1];
-            $d = $this->completar($d, false);
-            $d['nombreCmp'] = $d['prefijos'];
-            $cands[] = $d;
+        if (isset($this->infoSis[$k])) { return $this->infoSis[$k]; }
+        $S = $this->sistemas[$k];
+        $m = $this->mol;
+        $nums = [];
+        $info = ['n' => count($S['atomos']), 'atomos' => $S['atomos']];
+        $idxAristas = function (array $pos) use ($S): array {
+            $ix = array_flip($pos); $r = [];
+            foreach ($S['aristas'] as [$x, $y]) { $r[] = [$ix[$x], $ix[$y]]; }
+            return $r;
+        };
+        if ($S['tipo'] === 'mono') {
+            $info['clase'] = 'mono';
+            $c = $S['ciclo']; $N = count($c);
+            $info['arom'] = $N === 6 && $m->arom[$c[0]] && count(array_filter($c, fn($a) => $m->arom[$a])) === 6;
+            for ($s0 = 0; $s0 < $N; $s0++) {
+                foreach ([1, -1] as $dir) {
+                    $pos = [];
+                    for ($i = 0; $i < $N; $i++) { $pos[] = $c[(($s0 + $dir * $i) % $N + $N) % $N]; }
+                    $nums[] = ['pos' => $pos, 'locs' => range(1, $N), 'aristas' => $idxAristas($pos)];
+                }
+            }
+        } elseif ($S['tipo'] === 'espiro') {
+            $info['clase'] = 'espiro';
+            [$c1, $c2] = $S['ciclos'];
+            $x = count($c1) - 1; $y = count($c2) - 1;
+            $info['corchete'] = '[' . min($x, $y) . '.' . max($x, $y) . ']';
+            $ordenes = $x === $y ? [[$c1, $c2], [$c2, $c1]] : ($x < $y ? [[$c1, $c2]] : [[$c2, $c1]]);
+            foreach ($ordenes as [$pe, $gr]) {
+                $restoP = array_slice($pe, 1); $restoG = array_slice($gr, 1);
+                foreach ([$restoP, array_reverse($restoP)] as $rp) {
+                    foreach ([$restoG, array_reverse($restoG)] as $rg) {
+                        $pos = array_merge($rp, [$pe[0]], $rg);
+                        $nums[] = ['pos' => $pos, 'locs' => range(1, count($pos)), 'aristas' => $idxAristas($pos)];
+                    }
+                }
+            }
+        } else {
+            [$h1, $h2] = $S['cabezas'];
+            $P = $S['puentes'];
+            $tam = array_map('count', $P);
+            $cero = array_search(0, $tam, true);
+            $anillosT = [];
+            if ($cero !== false) {
+                $otros = array_values(array_diff_key($P, [$cero => 1]));
+                $anillosT = [count($otros[0]) + 2, count($otros[1]) + 2];
+                sort($anillosT);
+            }
+            $clave = implode(',', $anillosT);
+            if ($cero !== false && $anillosT[0] >= 5 && isset(self::FUSIONADOS[$clave])) {
+                // ---- sistema orto-fusionado con nombre retenido (P-25.1) ----
+                $info['clase'] = 'fus';
+                $info['plantilla'] = $clave;
+                [$en, $es, $T, $F] = self::FUSIONADOS[$clave];
+                $otros = array_values(array_diff_key($P, [$cero => 1]));
+                $per = array_merge([$h1], $otros[0], [$h2], array_reverse($otros[1]));
+                $n = count($per);
+                $iF0 = array_search($F[0], $T, true); $iF1 = array_search($F[1], $T, true);
+                for ($s0 = 0; $s0 < $n; $s0++) {
+                    foreach ([1, -1] as $dir) {
+                        $pos = [];
+                        for ($i = 0; $i < $n; $i++) { $pos[] = $per[(($s0 + $dir * $i) % $n + $n) % $n]; }
+                        $f = [$pos[$iF0], $pos[$iF1]]; sort($f); $h = [$h1, $h2]; sort($h);
+                        if ($f !== $h) { continue; }
+                        // la plantilla también fija el tamaño de cada anillo
+                        $ok = true;
+                        $ix = array_flip($pos);
+                        foreach ($S['aristas'] as [$x, $y]) {
+                            $d = abs($ix[$x] - $ix[$y]);
+                            if (!($d === 1 || $d === $n - 1 || ([$ix[$x], $ix[$y]] == [$iF0, $iF1]) || ([$ix[$y], $ix[$x]] == [$iF0, $iF1]))) { $ok = false; }
+                        }
+                        if ($ok) { $nums[] = ['pos' => $pos, 'locs' => $T, 'aristas' => $idxAristas($pos)]; }
+                    }
+                }
+                // posiciones válidas de hidrógeno indicado del hidruro progenitor (número impar de átomos)
+                $info['ih'] = [];
+                if ($n % 2 === 1) {
+                    foreach ($S['atomos'] as $a) {
+                        $resto = array_values(array_diff($S['atomos'], [$a]));
+                        if (MolOrg::emparejamientos($resto, $S['aristas'], 1)) { $info['ih'][] = $a; }
+                    }
+                }
+            } elseif ($cero !== false && $anillosT[0] >= 5) {
+                throw new NomenclaturaException('Sistema fusionado de anillos de ' . $anillosT[0] . ' y ' . $anillosT[1] . ' miembros: su nombre de fusión (p. ej., benzo[7]anuleno) no es un nombre retenido y se incorporará en una fase posterior.');
+            } else {
+                // ---- von Baeyer (P-23.2) ----
+                $info['clase'] = 'vb';
+                $ord = $tam; rsort($ord);
+                $info['corchete'] = '[' . implode('.', $ord) . ']';
+                foreach ([[$h1, $h2, $P], [$h2, $h1, array_map('array_reverse', $P)]] as [$c1, $c2, $PP]) {
+                    foreach ([[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]] as [$i, $j, $l]) {
+                        if (!(count($PP[$i]) >= count($PP[$j]) && count($PP[$j]) >= count($PP[$l]))) { continue; }
+                        $pos = array_merge([$c1], $PP[$i], [$c2], array_reverse($PP[$j]), $PP[$l]);
+                        $nums[] = ['pos' => $pos, 'locs' => range(1, count($pos)), 'aristas' => $idxAristas($pos)];
+                    }
+                }
+            }
         }
+        // átomos con insaturación endocíclica (para la antigüedad de anillos P-44.4.1 y el patrón «hidro»)
+        $ins = [];
+        foreach ($S['aristas'] as [$x, $y]) {
+            $o = $m->orden($x, $y);
+            if ($o === 2 || $o === 3 || $o === MolOrg::AROM) { $ins[$x] = true; $ins[$y] = true; }
+        }
+        $info['insat'] = $ins;
+        $info['nums'] = $nums;
+        return $this->infoSis[$k] = $info;
+    }
+
+    /** Descriptor que identifica sistemas idénticos (ensamblajes y nomenclatura multiplicativa). */
+    private function firmaSistema(int $k): ?string
+    {
+        $d = $this->datosSistema($k);
+        $nIns = count($d['insat']);
+        if ($d['clase'] === 'mono') {
+            if (!empty($d['arom'])) { return 'benceno'; }
+            return $nIns === 0 ? 'ciclo' . $d['n'] : null;
+        }
+        if ($d['clase'] === 'fus') {
+            if ($nIns === $d['n'] - ($d['ih'] ? 1 : 0)) { return 'fus' . $d['plantilla']; }
+            return $nIns === 0 ? 'fusat' . $d['plantilla'] : null;
+        }
+        return $nIns === 0 ? $d['clase'] . ($d['corchete'] ?? '') : null;
+    }
+
+    /**
+     * Candidatos (numeración × hidrógeno indicado/añadido/hidro × Kekulé) de un sistema de anillos.
+     * $op: padre, excluir, fv (átomo con valencia libre), ordFv (1|2), union (átomo unido al conector multiplicativo).
+     */
+    private function candidatosSistema(int $k, array $op): array
+    {
+        $m = $this->mol;
+        $D = $this->datosSistema($k);
+        $S = $this->sistemas[$k];
+        $padre = !empty($op['padre']);
+        $fv = $op['fv'] ?? null;
+        $ordFv = $op['ordFv'] ?? 1;
+        $union = $op['union'] ?? null;
+        $cands = [];
+        // estructuras de Kekulé alternativas de los anillos «bencénicos» de sistemas von Baeyer o espiro
+        // (benzociclobuteno: octa-1,3,5-trieno frente a octa-1(6),2,4-trieno)
+        $variantes = [[]];
+        if (in_array($D['clase'], ['vb', 'espiro'], true)) {
+            $U = []; $EU = [];
+            foreach ($m->anillos() as $r) {
+                if (count($r) !== 6 || array_diff($r, $S['atomos'])) { continue; }
+                $dob = 0;
+                for ($i = 0; $i < 6; $i++) { if ($m->orden($r[$i], $r[($i + 1) % 6]) === 2) { $dob++; } }
+                if ($dob !== 3) { continue; }
+                foreach ($r as $a) { $U[$a] = true; }
+                for ($i = 0; $i < 6; $i++) { $EU[] = [$r[$i], $r[($i + 1) % 6]]; }
+            }
+            if ($U) {
+                $variantes = [];
+                foreach (MolOrg::emparejamientos(array_keys($U), $EU, 16) as $mt) {
+                    $ov = [];
+                    foreach ($EU as [$x, $y]) { $ov[min($x, $y) . '-' . max($x, $y)] = 1; }
+                    foreach ($mt as [$x, $y]) { $ov[min($x, $y) . '-' . max($x, $y)] = 2; }
+                    $variantes[] = $ov;
+                }
+            }
+        }
+        $sat = array_values(array_diff($S['atomos'], array_keys($D['insat'])));
+        // átomos que deben ser sp3 en el progenitor por el sufijo (-ona, -ilideno): hidrógeno indicado o añadido (P-14.7)
+        $K = [];
+        if ($D['clase'] === 'fus') {
+            foreach ($S['atomos'] as $a) {
+                if ($padre && $this->principal === 'cetona') {
+                    foreach ($m->adj[$a] as $x => $o) { if ($m->el[$x] === 'O' && $o === 2) { $K[] = $a; } }
+                }
+            }
+            if ($fv !== null && $ordFv === 2) { $K[] = $fv; }
+        }
+        foreach ($D['nums'] as $num) {
+            foreach ($variantes as $ov) {
+                $d = $this->evaluar($num['pos'], ['padre' => $padre, 'anillo' => true, 'excluir' => $op['excluir'] ?? [],
+                    'locs' => $num['locs'], 'aristas' => $num['aristas'], 'ordenes' => $ov]);
+                if ($d['invalido']) { continue; }
+                $lab = array_combine($num['pos'], $num['locs']);
+                $d['sis'] = $k; $d['clase'] = $D['clase']; $d['lab'] = $lab;
+                $d['nr'] = $D['clase'] === 'mono' ? 1 : 2;
+                $d['len'] = $D['n'];
+                $d['insat'] = count($D['insat']);
+                $d['arom'] = !empty($D['arom']);
+                if ($d['arom'] || $D['clase'] === 'fus') { $d['mlocs'] = $d['dlocs'] = $d['tlocs'] = []; $d['mn'] = $d['dn'] = 0; }
+                if ($fv !== null) { $d['plocs'] = [$lab[$fv]]; $d['princ'] = []; }
+                if ($union !== null) { $d['union'] = [$lab[$union]]; }
+                if ($D['clase'] !== 'fus') { $cands[] = $d; continue; }
+                // ---- hidrógeno indicado (I), añadido (A) e hidro (H) ----
+                $Iops = $D['ih'] ? array_map(fn($a) => [$a], array_values(array_intersect($D['ih'], $sat))) : [[]];
+                foreach ($Iops as $I) {
+                    $Kr = array_values(array_diff(array_unique($K), $I));
+                    $libres = array_values(array_diff($sat, $I, $Kr));
+                    $mejorTam = null; $As = [];
+                    foreach ([0, 1, 2] as $t) {
+                        if ($mejorTam !== null) { break; }
+                        foreach (self::combinaciones($libres, $t) as $A) {
+                            $resto = array_values(array_diff($S['atomos'], $I, $Kr, $A));
+                            if (count($resto) % 2 === 0 && MolOrg::emparejamientos($resto, $S['aristas'], 1)) { $As[] = $A; $mejorTam = $t; }
+                        }
+                    }
+                    foreach ($As as $A) {
+                        $H = array_values(array_diff($sat, $I, $Kr, $A));
+                        $c = $d;
+                        $c['ilocs'] = self::ordenarLocs(array_map(fn($a) => $lab[$a], $I));
+                        $c['alocs'] = self::ordenarLocs(array_map(fn($a) => $lab[$a], $A));
+                        $c['hlocs'] = self::ordenarLocs(array_map(fn($a) => $lab[$a], $H));
+                        $cands[] = $c;
+                    }
+                }
+            }
+        }
+        return $cands;
+    }
+
+    private static function combinaciones(array $l, int $t): array
+    {
+        if ($t === 0) { return [[]]; }
+        $r = [];
+        foreach ($l as $i => $x) {
+            foreach (self::combinaciones(array_slice($l, $i + 1), $t - 1) as $c) { $r[] = array_merge([$x], $c); }
+        }
+        return $r;
+    }
+
+    /** Une partes de un nombre con guion cuando la siguiente empieza por localizador. */
+    private static function unir(array $partes): string
+    {
+        $r = '';
+        foreach ($partes as $p) {
+            if ($p === '') { continue; }
+            $r .= ($r !== '' && preg_match('/^\d/', $p) ? '-' : '') . $p;
+        }
+        return $r;
+    }
+
+    /**
+     * Nombre del hidruro de un sistema con su sufijo (sin prefijos sustituyentes):
+     * devuelve [hidro, base]; p. ej. ['2,3-dihydro', '1H-inden-1-one'].
+     * $sufijo ya incluye los localizadores y el hidrógeno añadido.
+     */
+    private function nombreSistema(array $d, string $sufijo, bool $citarInsat = true): array
+    {
+        $en = !$this->es();
+        $D = $this->datosSistema($d['sis']);
+        $n = $D['n'];
+        switch ($D['clase']) {
+            case 'mono':
+                if (!empty($D['arom'])) { return ['', $this->elidir(($en ? 'benzen§' : 'bencen§') . $sufijo)]; }
+                return ['', $this->ensamblar(($en ? 'cyclo' : 'ciclo') . $this->raiz($n), $d['dlocs'], $d['tlocs'], $citarInsat, $sufijo)];
+            case 'fus':
+                $stem = self::FUSIONADOS[$D['plantilla']][$en ? 0 : 1];
+                $ih = $d['ilocs'] ? implode(',', $d['ilocs']) . 'H-' : '';
+                $hid = '';
+                if ($d['hlocs']) {
+                    $mult = self::MULT_SIMPLE[count($d['hlocs'])] . ($en ? 'hydro' : 'hidro');
+                    $total = count($D['insat']) === 0 && !$d['ilocs'];
+                    $hid = $total ? $mult : implode(',', $d['hlocs']) . '-' . $mult;
+                }
+                return [$hid, $ih . $this->elidir($stem . '§' . $sufijo)];
+            case 'vb':
+                return ['', $this->ensamblar(($en ? 'bicyclo' : 'biciclo') . $D['corchete'] . $this->raiz($n), $d['dlocs'], $d['tlocs'], true, $sufijo)];
+            case 'espiro':
+                return ['', $this->ensamblar(($en ? 'spiro' : 'espiro') . $D['corchete'] . $this->raiz($n), $d['dlocs'], $d['tlocs'], true, $sufijo)];
+        }
+        throw new NomenclaturaException('Sistema de anillos no reconocido.');
+    }
+
+    /** Localizadores de un sufijo con hidrógeno añadido: «-1(2H)-». */
+    private static function locsSufijo(array $locs, array $alocs): string
+    {
+        $t = implode(',', $locs);
+        if ($alocs) { $t .= '(' . implode(',', array_map(fn($l) => $l . 'H', $alocs)) . ')'; }
+        return '-' . $t . '-';
+    }
+
+    /** Anillo o sistema de anillos como sustituyente: fenil, ciclohexil, naftalen-1-il, biciclo[2.2.1]heptan-2-il… */
+    private function sustSistema(int $r, int $p, int $ord): array
+    {
+        $k = $this->anilloDe[$r];
+        $D = $this->datosSistema($k);
+        $cands = $this->candidatosSistema($k, ['excluir' => [$p => true], 'fv' => $r, 'ordFv' => $ord]);
+        foreach ($cands as &$c) { $c = $this->completar($c, false); $c['nombreCmp'] = $c['prefijos']; }
+        unset($c);
         usort($cands, fn($a, $b) => $this->comparar($a, $b)[0]);
         $best = $cands[0];
         $en = !$this->es();
-        if ($arom) {
-            if ($ord === 2) { throw new NomenclaturaException('Anillo aromático unido por doble enlace: no admitido.'); }
-            $base = $en ? 'phenyl' : 'fenil';
+        $N = $D['n'];
+        if ($D['clase'] === 'mono') {
+            if (!empty($D['arom'])) {
+                if ($ord === 2) { throw new NomenclaturaException('Anillo aromático unido por doble enlace: no admitido.'); }
+                $base = $en ? 'phenyl' : 'fenil';
+            } else {
+                $raiz = ($en ? 'cyclo' : 'ciclo') . $this->raiz($N);
+                $suf = $ord === 2 ? ($en ? 'ylidene' : 'iliden') : $this->yl();
+                $insat = (bool)$best['dlocs'] || (bool)$best['tlocs'];
+                $base = $insat ? $this->ensamblar($raiz, $best['dlocs'], $best['tlocs'], true, '-1-' . $suf) : $raiz . $suf;
+            }
+            $nombre = $best['prefijos'] . $base;
         } else {
-            $raiz = ($en ? 'cyclo' : 'ciclo') . $this->raiz($N);
             $suf = $ord === 2 ? ($en ? 'ylidene' : 'iliden') : $this->yl();
-            $insat = (bool)$best['dlocs'] || (bool)$best['tlocs'];
-            $base = $insat ? $this->ensamblar($raiz, $best['dlocs'], $best['tlocs'], true, '-1-' . $suf) : $raiz . $suf;
+            [$hid, $base] = $this->nombreSistema($best, self::locsSufijo($best['plocs'], $best['alocs'] ?? []) . $suf);
+            $nombre = self::unir([$best['prefijos'], $hid, $base]);
+            if ($this->estilo === 'trad' && $best['cuenta'] === 0 && $hid === '' && $ord === 1) {
+                $tr = $en ? ['naphthalen-1-yl' => '1-naphthyl', 'naphthalen-2-yl' => '2-naphthyl']
+                          : ['naftalen-1-il' => '1-naftil', 'naftalen-2-il' => '2-naftil'];
+                $nombre = $tr[$nombre] ?? $nombre;
+            }
+            $base = $nombre;
         }
-        $nombre = $best['prefijos'] . $base;
         if ($best['cuenta'] > 0) { return $this->info($nombre, 'complejo', $N, ['anillo' => true]); }
         return $this->info($nombre, preg_match('/\d/', $base) ? 'compuesto' : 'simple', $N, ['anillo' => true]);
     }
@@ -1137,30 +1619,24 @@ final class IupacOrganica
         if ($g === -1) { return $this->info($en ? 'formyl' : 'formil', 'simple', 1); }
         if (isset($this->fc[$g])) { throw new NomenclaturaException('Dos grupos carbonilo contiguos en un sustituyente (oxalilo, glioxililo…): no se incluye en esta fase.'); }
         if (isset($this->anilloDe[$g])) {
-            $ring = $this->anillos[$this->anilloDe[$g]];
-            $N = count($ring);
-            $i0 = array_search($g, $ring, true);
-            $cands = [];
-            foreach ([1, -1] as $dir) {
-                $pos = [];
-                for ($i = 0; $i < $N; $i++) { $pos[] = $ring[(($i0 + $dir * $i) % $N + $N) % $N]; }
-                $d = $this->evaluar($pos, ['anillo' => true, 'excluir' => [$f => true]]);
-                if ($m->arom[$g]) { $d['mlocs'] = $d['dlocs'] = $d['tlocs'] = []; $d['mn'] = $d['dn'] = 0; }
-                $d['plocs'] = [1];
-                $d = $this->completar($d, false);
-                $d['nombreCmp'] = $d['prefijos'];
-                $cands[] = $d;
-            }
+            $k = $this->anilloDe[$g];
+            $D = $this->datosSistema($k);
+            $cands = $this->candidatosSistema($k, ['excluir' => [$f => true], 'fv' => $g]);
+            foreach ($cands as &$c) { $c = $this->completar($c, false); $c['nombreCmp'] = $c['prefijos']; }
+            unset($c);
             usort($cands, fn($a, $b) => $this->comparar($a, $b)[0]);
             $best = $cands[0];
-            if ($m->arom[$g]) {
+            if ($D['clase'] === 'mono' && !empty($D['arom'])) {
                 $nombre = $best['prefijos'] . ($en ? 'benzoyl' : 'benzoil');
-            } else {
-                $raiz = ($en ? 'cyclo' : 'ciclo') . $this->raiz($N);
+            } elseif ($D['clase'] === 'mono') {
+                $raiz = ($en ? 'cyclo' : 'ciclo') . $this->raiz($D['n']);
                 $citar = $best['cuenta'] > 0 || $best['dlocs'] || $best['tlocs'];
                 $nombre = $best['prefijos'] . $this->ensamblar($raiz, $best['dlocs'], $best['tlocs'], true, ($citar ? '-1-' : '') . ($en ? 'carbonyl' : 'carbonil'));
+            } else {
+                [$hid, $base] = $this->nombreSistema($best, self::locsSufijo($best['plocs'], []) . ($en ? 'carbonyl' : 'carbonil'));
+                $nombre = self::unir([$best['prefijos'], $hid, $base]);
             }
-            return $this->info($nombre, $best['cuenta'] > 0 ? 'complejo' : (preg_match('/\d/', $nombre) ? 'compuesto' : 'simple'), $N + 1);
+            return $this->info($nombre, $best['cuenta'] > 0 ? 'complejo' : (preg_match('/\d/', $nombre) ? 'compuesto' : 'simple'), $D['n'] + 1);
         }
         // cadena: [f, g, ...]
         $atomos = $this->subarbolAciclico($g, $f);
@@ -1315,20 +1791,9 @@ final class IupacOrganica
     {
         $m = $this->mol;
         $cands = [];
-        // anillos
-        foreach ($this->anillos as $ring) {
-            $N = count($ring);
-            $arom = $m->arom[$ring[0]];
-            for ($s = 0; $s < $N; $s++) {
-                foreach ([1, -1] as $dir) {
-                    $pos = [];
-                    for ($i = 0; $i < $N; $i++) { $pos[] = $ring[(($s + $dir * $i) % $N + $N) % $N]; }
-                    $d = $this->evaluar($pos, ['padre' => true, 'anillo' => true]);
-                    if ($arom) { $d['mlocs'] = $d['dlocs'] = $d['tlocs'] = []; $d['mn'] = $d['dn'] = 0; }
-                    $d['arom'] = $arom;
-                    $cands[] = $d;
-                }
-            }
+        // sistemas de anillos
+        foreach (array_keys($this->sistemas) as $k) {
+            foreach ($this->candidatosSistema($k, ['padre' => true]) as $d) { $cands[] = $d; }
         }
         // cadenas
         $esq = [];
@@ -1387,7 +1852,7 @@ final class IupacOrganica
         }
         if (!$cands) { throw new NomenclaturaException('No se encontró una estructura principal válida (¿triple enlace hacia un sustituyente?).'); }
         // pre-filtro barato por los criterios de selección de la estructura
-        $seqSel = $this->estilo === 'pin' ? ['pn', 'anillo', 'len', 'mn', 'dn'] : ['pn', 'anillo', 'mn', 'dn', 'len'];
+        $seqSel = array_slice($this->secuencia(), 0, 7);
         usort($cands, fn($a, $b) => $this->comparar($a, $b, $seqSel)[0]);
         $top = $cands[0];
         $finalistas = []; $rivales = [];
@@ -1412,16 +1877,234 @@ final class IupacOrganica
         if ($m->numCarbonos() > 60) { throw new NomenclaturaException('La estructura tiene más de 60 carbonos.'); }
         [$fin, $rivales] = $this->candidatos();
         $best = $fin[0];
-        if ($best['anillo'] && count($this->anillos) > 1) {
-            throw new NomenclaturaException('La estructura principal sería un anillo y la molécula tiene más de un anillo (ensamblajes como el bifenilo, anillos unidos por cadenas o nomenclatura multiplicativa). Estos casos se incorporarán en la fase 2.');
-        }
-        $r = $this->construirNombre($best);
+        $r = $best['anillo'] ? $this->especial($best) : null;       // ensamblaje o nomenclatura multiplicativa
+        if ($r === null) { $r = $this->construirNombre($best); }
         $r['explicacion'] = $this->explicar($best, $fin, $rivales, $r);
-        $r['cadena'] = $best['pos'];
+        if (!isset($r['cadena'])) { $r['cadena'] = $best['pos']; }
+        if (!isset($r['mapa'])) {
+            $r['mapa'] = [];
+            foreach ($best['pos'] as $i => $a) { $r['mapa'][$a] = isset($best['lab']) ? $best['lab'][$a] : $i + 1; }
+        }
         $r['anillo'] = $best['anillo'];
-        $r['subs'] = $best['subs'];
+        $r['subs'] = $r['subsNombre'] ?? $best['subs'];
         $r['radicofuncional'] = $this->nombreClaseFuncional();
         return $r;
+    }
+
+    /* ---------- ensamblajes de anillos (P-28) y nomenclatura multiplicativa (P-15.3) ---------- */
+
+    private function especial(array $best): ?array
+    {
+        $k = $best['sis'];
+        $f = $this->firmaSistema($k);
+        if ($f === null) { return null; }
+        $iguales = [];
+        foreach (array_keys($this->sistemas) as $j) {
+            if ($j !== $k && $this->firmaSistema($j) === $f) { $iguales[] = $j; }
+        }
+        if (count($iguales) !== 1) { return null; }
+        $j = $iguales[0];
+        $uS = $uT = null;
+        foreach ($this->sistemas[$k]['atomos'] as $a) {
+            foreach ($this->mol->adj[$a] as $b => $o) {
+                if (($this->anilloDe[$b] ?? -1) === $j) {
+                    if ($o !== 1 || $uS !== null) { return null; }
+                    $uS = $a; $uT = $b;
+                }
+            }
+        }
+        if ($uS !== null) { return $this->ensamblaje($k, $j, $uS, $uT); }
+        return $this->multiplicativa($k, $j);
+    }
+
+    private static function prima($l): string { return $l . "'"; }
+
+    /** Ensamblaje de dos sistemas idénticos unidos por un enlace sencillo: 1,1'-bifenilo, 1,1'-binaftaleno… */
+    private function ensamblaje(int $k, int $j, int $uS, int $uT): ?array
+    {
+        $DS = $this->datosSistema($k);
+        if (!empty($DS['ih'])) { return null; }
+        $en = !$this->es();
+        $cands = [];
+        foreach ([[$k, $uS, $j, $uT], [$j, $uT, $k, $uS]] as [$A, $ua, $B, $ub]) {
+            $NA = $this->datosSistema($A)['nums']; $NB = $this->datosSistema($B)['nums'];
+            foreach ($NA as $na) {
+                foreach ($NB as $nb) {
+                    $off = count($na['pos']);
+                    $pos = array_merge($na['pos'], $nb['pos']);
+                    $locs = array_merge($na['locs'], array_map([self::class, 'prima'], $nb['locs']));
+                    $ar = $na['aristas'];
+                    foreach ($nb['aristas'] as [$x, $y]) { $ar[] = [$x + $off, $y + $off]; }
+                    $d = $this->evaluar($pos, ['padre' => true, 'anillo' => true, 'locs' => $locs, 'aristas' => $ar]);
+                    if ($d['invalido']) { continue; }
+                    $lab = array_combine($pos, $locs);
+                    $d['mlocs'] = $d['dlocs'] = $d['tlocs'] = []; $d['mn'] = $d['dn'] = 0;
+                    $d['union'] = self::ordenarLocs([$lab[$ua], $lab[$ub]]);
+                    $d['lab'] = $lab; $d['sisA'] = $A;
+                    $d = $this->completar($d, false);
+                    $d['nombreCmp'] = $d['prefijos'];
+                    $cands[] = $d;
+                }
+            }
+        }
+        if (!$cands) { return null; }
+        $seq = ['union', 'plocs', 'mlocs', 'dlocs', 'cuenta', 'locs', 'citados', 'nombre'];
+        usort($cands, fn($a, $b) => $this->comparar($a, $b, $seq)[0]);
+        $d = $cands[0];
+        $princ = $d['princ'];
+        $nk = count($princ);
+        $t = $nk ? $princ[0]['t'] : null;
+        if ($t === 'ester' && $nk > 1) { return null; }
+        $clase = $DS['clase'];
+        if ($clase === 'mono' && !empty($DS['arom'])) { $stem = $en ? 'biphenyl' : 'bifenil'; $fin = $en ? '' : 'o'; }
+        elseif ($clase === 'mono') { $c = ($en ? 'cyclo' : 'ciclo') . $this->raiz($DS['n']) . ($en ? 'ane' : 'ano'); $stem = 'bi(' . $c . ')'; $fin = ''; }
+        elseif ($clase === 'fus') { $stem = 'bi' . self::FUSIONADOS[$DS['plantilla']][$en ? 0 : 1] . ($en ? 'e' : 'o'); $fin = ''; }
+        else { return null; }
+        $ul = implode(',', $d['union']);
+        $arm = $this->armar($d['subs'], false);
+        if ($nk > 0) {
+            $base = '[' . $ul . '-' . $stem . ']' . self::locsSufijo($d['plocs'], []) . ($nk > 1 ? self::MULT_SIMPLE[$nk] : '') . self::SUF[$this->lang][$t][1];
+            $nombre = $arm['prefijos'] . $base;
+        } else {
+            $nombre = self::unir([$arm['prefijos'], $ul . '-' . $stem . $fin]);
+        }
+        if (!$en && $t === 'acido') { $nombre = 'ácido ' . $nombre; }
+        if ($t === 'ester') { $nombre = $this->componerEster($princ, $nombre); }
+        $mapa = [];
+        foreach ($d['lab'] as $a => $l) { if (is_int($l)) { $mapa[$a] = $l; } }
+        return ['nombre' => $nombre, 'notas' => ['ensamblaje'], 'nsubs' => [], 'omitir' => false, 'grupos' => $arm['grupos'],
+            'cadena' => $d['pos'], 'mapa' => $mapa, 'subsNombre' => $d['subs']];
+    }
+
+    /** Nombre multiplicativo: 1,1'-metilendibenceno, 4,4'-oxidianilina, 4,4'-(propano-2,2-diil)difenol… */
+    private function multiplicativa(int $k, int $j): ?array
+    {
+        $m = $this->mol;
+        $en = !$this->es();
+        $enS = array_fill_keys($this->sistemas[$k]['atomos'], true);
+        $enT = array_fill_keys($this->sistemas[$j]['atomos'], true);
+        // componentes del resto de la molécula
+        $comp = []; $idc = 0;
+        foreach (array_keys($m->el) as $a) {
+            if (isset($enS[$a]) || isset($enT[$a]) || isset($comp[$a])) { continue; }
+            $pila = [$a]; $comp[$a] = $idc;
+            while ($pila) {
+                $x = array_pop($pila);
+                foreach ($m->adj[$x] as $y => $o) {
+                    if (!isset($enS[$y]) && !isset($enT[$y]) && !isset($comp[$y])) { $comp[$y] = $idc; $pila[] = $y; }
+                }
+            }
+            $idc++;
+        }
+        $unionS = []; $unionT = [];
+        foreach ($comp as $a => $c) {
+            foreach ($m->adj[$a] as $b => $o) {
+                if (isset($enS[$b])) { $unionS[$c][] = [$b, $a, $o]; }
+                if (isset($enT[$b])) { $unionT[$c][] = [$b, $a, $o]; }
+            }
+        }
+        $puente = array_values(array_intersect(array_keys($unionS), array_keys($unionT)));
+        if (count($puente) !== 1) { return null; }
+        $c = $puente[0];
+        if (count($unionS[$c]) !== 1 || count($unionT[$c]) !== 1) { return null; }
+        [$sA, $c1, $o1] = $unionS[$c][0]; [$tA, $c2, $o2] = $unionT[$c][0];
+        if ($o1 !== 1 || $o2 !== 1) { return null; }
+        $C = array_keys(array_filter($comp, fn($x) => $x === $c));
+        foreach ($C as $a) { if (isset($this->anilloDe[$a])) { return null; } }
+        // el conector no puede contener grupos del grupo principal
+        if ($this->principal !== null) {
+            foreach ($C as $a) {
+                if ($this->tipoFC($a, false) === $this->principal || ($this->principal === 'aldehido' && isset($this->ald[$a]))) { return null; }
+                if ($m->el[$a] === 'N' && $this->principal === 'amina' && !$m->esNitroN($a) && !$this->esNAmida($a)) { return null; }
+                if ($m->el[$a] === 'O' && count($m->adj[$a]) === 1) {
+                    $cc = $m->vecinos($a)[0];
+                    if ($m->orden($a, $cc) === 1 && $this->principal === 'alcohol' && !isset($this->fc[$cc])) { return null; }
+                    if ($m->orden($a, $cc) === 2 && $this->principal === 'cetona' && !isset($this->fc[$cc]) && !isset($this->ald[$cc])) { return null; }
+                }
+            }
+        }
+        $conn = $this->conector($C, $c1, $c2, $sA, $tA);
+        if ($conn === null) { return null; }
+        // unidades multiplicadas
+        $u = [];
+        foreach ([[$k, $sA, $c1], [$j, $tA, $c2]] as [$X, $xa, $cx]) {
+            if (!in_array($this->principal, [null, 'alcohol', 'amina', 'acido', 'aldehido', 'nitrilo', 'amida', 'cetona'], true)) { return null; }
+            $cands = $this->candidatosSistema($X, ['padre' => true, 'excluir' => [$cx => true], 'union' => $xa]);
+            foreach ($cands as &$cd) { $cd = $this->completar($cd, false); $cd['nombreCmp'] = $cd['prefijos']; }
+            unset($cd);
+            if (!$cands) { return null; }
+            usort($cands, fn($a, $b) => $this->comparar($a, $b)[0]);
+            $bx = $cands[0];
+            $nm = $this->construirNombre($bx, true);
+            if ($nm['nsubs']) { return null; }
+            $u[] = ['d' => $bx, 'nombre' => $nm['nombre'], 'loc' => $bx['union'][0], 'grupos' => $nm['grupos']];
+        }
+        if ($u[0]['nombre'] !== $u[1]['nombre'] || $u[0]['loc'] !== $u[1]['loc']) { return null; }
+        $un = $u[0]['nombre'];
+        $acido = false;
+        if (!$en && strpos($un, 'ácido ') === 0) { $un = substr($un, strlen('ácido ')); $acido = true; }
+        $cuerpo = $u[0]['d']['cuenta'] > 0 ? 'bis' . self::encerrar($un) : 'di' . $un;
+        $ct = $conn['tipo'] === 'simple' ? $conn['nombre'] : self::encerrar($conn['nombre']);
+        $nombre = $u[0]['loc'] . ',' . self::prima($u[0]['loc']) . '-' . $ct . $cuerpo;
+        if ($acido) { $nombre = 'ácido ' . $nombre; }
+        $mapa = [];
+        foreach ($u[0]['d']['lab'] as $a => $l) { if (is_int($l)) { $mapa[$a] = $l; } }
+        return ['nombre' => $nombre, 'notas' => ['multiplicativa'], 'nsubs' => [], 'omitir' => false, 'grupos' => $u[0]['grupos'],
+            'cadena' => $u[0]['d']['pos'], 'mapa' => $mapa, 'subsNombre' => $u[0]['d']['subs'], 'conector' => $conn['nombre']];
+    }
+
+    /** Sustituyente divalente que une las unidades: oxi, azanodiil, metilen, carbonil, etano-1,2-diil, propano-2,2-diil… */
+    private function conector(array $C, int $c1, int $c2, int $sA, int $tA): ?array
+    {
+        $m = $this->mol;
+        $en = !$this->es();
+        if (count($C) === 1) {
+            $x = $C[0];
+            if ($m->el[$x] === 'O') { return $this->info($en ? 'oxy' : 'oxi', 'simple'); }
+            if ($m->el[$x] === 'N' && count($m->adj[$x]) === 2) { return $this->info($en ? 'azanediyl' : 'azanodiil', 'simple'); }
+        }
+        if ($m->el[$c1] !== 'C' || $m->el[$c2] !== 'C' || !$this->esEsqueleto($c1, false) || !$this->esEsqueleto($c2, false)) { return null; }
+        $E = [];
+        foreach ($C as $a) { if ($m->el[$a] === 'C' && $this->esEsqueleto($a, false)) { $E[$a] = true; } }
+        foreach ($C as $a) {                        // heteroátomos del conector: solo como prefijos terminales
+            if ($m->el[$a] !== 'C' && count($m->adj[$a]) > 1 && !$m->esNitroN($a)) {
+                $puenteo = 0;
+                foreach ($m->adj[$a] as $b => $o) { if (isset($E[$b])) { $puenteo++; } }
+                if ($puenteo > 1) { return null; }
+            }
+        }
+        $base = $this->camino($c1, $c2, $E);
+        if (!$base) { return null; }
+        $ext = [$c1 => true, $c2 => true];
+        foreach (array_keys($E) as $a) {
+            $g = 0;
+            foreach ($m->adj[$a] as $b => $o) { if (isset($E[$b])) { $g++; } }
+            if ($g <= 1) { $ext[$a] = true; }
+        }
+        $cands = [];
+        foreach (array_keys($ext) as $u) {
+            foreach (array_keys($ext) as $v) {
+                $ruta = $u === $v ? [$u] : $this->camino($u, $v, $E);
+                if (!$ruta || !in_array($c1, $ruta, true) || !in_array($c2, $ruta, true)) { continue; }
+                $d = $this->evaluar($ruta, ['excluir' => [$sA => true, $tA => true]]);
+                if ($d['invalido']) { continue; }
+                $d['plocs'] = self::ordenarLocs([array_search($c1, $ruta, true) + 1, array_search($c2, $ruta, true) + 1]);
+                $d['princ'] = [];
+                $d = $this->completar($d, count($ruta) === 1);
+                $d['nombreCmp'] = $d['prefijos'];
+                $cands[] = $d;
+            }
+        }
+        if (!$cands) { return null; }
+        usort($cands, fn($a, $b) => $this->comparar($a, $b, ['len', 'mn', 'dn', 'plocs', 'mlocs', 'dlocs', 'cuenta', 'locs', 'citados', 'nombre'])[0]);
+        $b = $cands[0];
+        if ($b['len'] === 1) {
+            if (count($b['subs']) === 1 && $b['subs'][0]['info']['nombre'] === 'oxo') { return $this->info($en ? 'carbonyl' : 'carbonil', 'simple'); }
+            $nm = $b['prefijos'] . ($en ? 'methylene' : 'metilen');
+            return $this->info($nm, $b['cuenta'] > 0 ? 'complejo' : 'simple');
+        }
+        $nm = $b['prefijos'] . $this->ensamblar($this->raiz($b['len']), $b['dlocs'], $b['tlocs'], true, '-' . implode(',', $b['plocs']) . '-' . ($en ? 'diyl' : 'diil'));
+        return $this->info($nm, $b['cuenta'] > 0 ? 'complejo' : 'compuesto');
     }
 
     private const SUF = [
@@ -1438,7 +2121,7 @@ final class IupacOrganica
     ];
     private const FC_CADENA = ['acido', 'ester', 'amida', 'nitrilo', 'aldehido'];
 
-    private function construirNombre(array $best): array
+    private function construirNombre(array $best, bool $unidad = false): array
     {
         $m = $this->mol;
         $en = !$this->es();
@@ -1451,10 +2134,28 @@ final class IupacOrganica
         $t = $k ? $princ[0]['t'] : null;
         $notas = [];
 
-        $subs = array_values(array_filter($best['subs'], fn($x) => is_int($x['loc'])));
-        $nsubs = array_values(array_filter($best['subs'], fn($x) => !is_int($x['loc'])));
-        $nPref = count($subs);
+        $subs = array_values(array_filter($best['subs'], fn($x) => !self::esN($x['loc'])));
+        $nsubs = array_values(array_filter($best['subs'], fn($x) => self::esN($x['loc'])));
+        $nPref = count($subs) + ($unidad ? 1 : 0);          // en una unidad multiplicativa, el punto de unión cuenta
         $chainFC = !$anillo && in_array($t, self::FC_CADENA, true);
+
+        // ---- sistemas policíclicos: fusionados, von Baeyer, espiro ----
+        if ($anillo && ($best['clase'] ?? 'mono') !== 'mono') {
+            $arm = $this->armar(array_merge($subs, $nsubs), false);
+            $sufijo = '';
+            if ($k > 0) {
+                $sufijo = self::locsSufijo($best['plocs'], $best['alocs'] ?? []) . ($k > 1 ? self::MULT_SIMPLE[$k] : '') . self::SUF[$this->lang][$t][1];
+            }
+            [$hid, $base] = $this->nombreSistema($best, $sufijo);
+            $nombre = self::unir([$arm['prefijos'], $hid, $base]);
+            if (!$en && $t === 'acido') { $nombre = 'ácido ' . $nombre; }
+            if ($t === 'ester') { $nombre = $this->componerEster($princ, $nombre); }
+            $notas[] = 'sistema_' . $best['clase'];
+            if (!empty($best['ilocs'])) { $notas[] = 'h_indicado'; }
+            if (!empty($best['alocs'])) { $notas[] = 'h_anadido'; }
+            if (!empty($best['hlocs'])) { $notas[] = 'hidro'; }
+            return ['nombre' => $nombre, 'notas' => $notas, 'nsubs' => $nsubs, 'omitir' => false, 'grupos' => $arm['grupos']];
+        }
 
         // ---- omisión de localizadores (P-14.3.4) ----
         $omitPref = false; $omitSuf = $chainFC; $omitInsat = false;
@@ -1695,6 +2396,12 @@ final class IupacOrganica
                 $g = reset($a['grupos']);
                 return 'el localizador más bajo corresponde al prefijo citado primero en orden alfanumérico (' . ($g['info']['nombre'] ?? '') . ') (P-31.1.4.3.4, P-45.2.3)';
             case 'nombre': return 'conduce al nombre que aparece primero en orden alfanumérico (P-45.5)';
+            case 'nr': return 'tiene más anillos (' . ($a['nr'] ?? 0) . ' frente a ' . ($b['nr'] ?? 0) . ') (P-44.2)';
+            case 'insat': return 'tiene más átomos insaturados, es decir, menor grado de hidrogenación (P-44.4.1)';
+            case 'ilocs': return 'da el localizador más bajo al hidrógeno indicado: ' . self::fmt($a['ilocs'] ?? []) . ' frente a ' . self::fmt($b['ilocs'] ?? []) . ' (P-31.1.4.2.4)';
+            case 'union': return 'da los localizadores más bajos a los puntos de unión: ' . self::fmt($a['union'] ?? []) . ' frente a ' . self::fmt($b['union'] ?? []) . ' (P-28.2, P-15.3)';
+            case 'alocs': return 'da el localizador más bajo al hidrógeno añadido: ' . self::fmt($a['alocs'] ?? []) . ' frente a ' . self::fmt($b['alocs'] ?? []) . ' (P-31.1.4)';
+            case 'hlocs': return 'da los localizadores más bajos a los prefijos hidro: ' . self::fmt($a['hlocs'] ?? []) . ' frente a ' . self::fmt($b['hlocs'] ?? []) . ' (P-31.1.4.2.4)';
         }
         return '';
     }
@@ -1727,11 +2434,45 @@ final class IupacOrganica
         } elseif ($pres) {
             $exp[] = 'Grupos presentes: ' . implode(', ', $pres) . '. Ninguno se expresa como sufijo: los éteres (alcoxi), halógenos y el grupo nitro se nombran siempre como prefijos (P-61, P-63.2), sobre el hidruro progenitor.';
         }
+        // ensamblajes y nombres multiplicativos: explicación propia
+        if (array_intersect($res['notas'], ['ensamblaje', 'multiplicativa'])) {
+            $D = $this->datosSistema($best['sis']);
+            $comp = $D['clase'] === 'mono' ? (!empty($D['arom']) ? 'anillos de benceno' : 'anillos de ' . $D['n'] . ' carbonos') : 'sistemas «' . ($D['clase'] === 'fus' ? self::FUSIONADOS[$D['plantilla']][1] . 'o' : ($D['corchete'] ?? '')) . '»';
+            if (in_array('ensamblaje', $res['notas'], true)) {
+                $exp[] = 'Estructura principal: ensamblaje de dos ' . $comp . ' idénticos, unidos directamente. Un ensamblaje es preferido a cada uno de sus componentes (P-28, P-44.1.2).';
+            } else {
+                $exp[] = 'Estructura principal: dos unidades idénticas (' . $comp . ', con el mismo grupo principal y los mismos prefijos) unidas por el conector «' . ($res['conector'] ?? '') . '». Se usa nomenclatura multiplicativa en lugar de tratar una unidad como sustituyente de la otra (P-15.3, P-51.3).';
+            }
+            $todos = $res['subsNombre'] ?? [];
+            if ($todos) {
+                $t = [];
+                foreach ($todos as $sb) { $t[] = $sb['info']['nombre'] . ' en ' . (self::esN($sb['loc']) ? '' : 'C') . $sb['loc']; }
+                $exp[] = 'Prefijos ' . (in_array('multiplicativa', $res['notas'], true) ? 'de cada unidad' : 'del ensamblaje') . ': ' . implode('; ', $t) . '.';
+            }
+            foreach ($res['notas'] as $n) {
+                if ($n === 'ensamblaje') { $exp[] = 'Dos sistemas de anillos idénticos unidos por un enlace sencillo forman un ensamblaje: 1,1\'-bifenilo, 1,1\'-binaftaleno, 1,1\'-bi(ciclohexano). El segundo componente se numera con primas y los puntos de unión reciben los localizadores más bajos; después se aplican las reglas habituales al grupo principal y a los prefijos (P-28).'; }
+                if ($n === 'multiplicativa') { $exp[] = 'Nombre multiplicativo: localizadores de unión (con prima en la segunda unidad) + conector (metilen, oxi, carbonil, azanodiil, etano-1,2-diil, propano-2,2-diil…) + di (o bis si la unidad lleva prefijos) + nombre de la unidad. En cada unidad, el grupo principal recibe el localizador más bajo y después el punto de unión (P-15.3).'; }
+            }
+            if (count($res['grupos']) > 1) {
+                $exp[] = 'Los prefijos se citan en orden alfanumérico: ' . implode(' < ', array_keys($res['grupos'])) . ' (P-14.5).';
+            }
+            return array_values(array_filter($exp));
+        }
         // 2. estructura principal
         $pos = $best['pos'];
         $N = count($pos);
         if ($best['anillo']) {
-            $tipo = !empty($best['arom']) ? 'anillo de benceno' : 'anillo de ' . $N . ' carbonos';
+            $D = $this->datosSistema($best['sis']);
+            switch ($D['clase']) {
+                case 'fus':
+                    $tipo = 'sistema de dos anillos fusionados (' . $D['n'] . ' C) con el nombre retenido «' . self::FUSIONADOS[$D['plantilla']][1] . 'o»'; break;
+                case 'vb':
+                    $tipo = 'sistema bicíclico con puente ' . $D['corchete'] . ' (nomenclatura de von Baeyer)'; break;
+                case 'espiro':
+                    $tipo = 'sistema espiro ' . $D['corchete']; break;
+                default:
+                    $tipo = !empty($best['arom']) ? 'anillo de benceno' : 'anillo de ' . $N . ' carbonos';
+            }
             $txt = 'Estructura principal: ' . $tipo;
         } else {
             $txt = 'Cadena principal de ' . $N . ' carbono' . ($N > 1 ? 's' : '');
@@ -1790,6 +2531,12 @@ final class IupacOrganica
             if ($n === 'retenido_acetico') { $exp[] = 'Para dos carbonos se usan los nombres retenidos preferidos: ácido acético, acetato, acetamida, acetonitrilo, acetaldehído (P-65.1, P-66).'; }
             if ($n === 'retenido_formico') { $exp[] = 'Con un solo carbono se usan los nombres retenidos preferidos: ácido fórmico, formiato, formamida, formaldehído, formonitrilo (P-65.1, P-66).'; }
             if ($n === 'retenido_oxalico') { $exp[] = 'HOOC–COOH conserva el nombre retenido preferido ácido oxálico (P-65.1.1).'; }
+            if ($n === 'sistema_fus') { $exp[] = 'Los biciclos orto-fusionados con anillos de 5 o más miembros se nombran con el hidruro de fusión retenido (pentaleno, indeno, azuleno, naftaleno, heptaleno), que tiene una numeración fija: los átomos de fusión llevan letra (3a, 4a, 8a…) y solo se elige entre las orientaciones equivalentes (P-25.1, P-25.3).'; }
+            if ($n === 'h_indicado') { $exp[] = 'El hidruro progenitor tiene un número impar de átomos: se indica con «xH-» qué carbono del anillo no forma parte de un doble enlace (hidrógeno indicado, P-14.7.1), con el localizador más bajo posible.'; }
+            if ($n === 'h_anadido') { $exp[] = 'El sufijo «-ona» exige un carbono saturado que el hidruro progenitor no tiene: el hidrógeno añadido se cita entre paréntesis después del localizador del sufijo, p. ej., naftalen-1(2H)-ona (P-14.7.2).'; }
+            if ($n === 'hidro') { $exp[] = 'Los carbonos saturados adicionales se expresan con prefijos «hidro» en número par (dihidro, tetrahidro…), citados justo antes del nombre del progenitor y no alfabetizados con los demás prefijos (P-31.1.4.2.4).'; }
+            if ($n === 'sistema_vb') { $exp[] = 'Nomenclatura de von Baeyer: «biciclo» + número de átomos de cada puente en orden decreciente entre corchetes + nombre del alcano con el total de átomos. Se numera desde una cabeza de puente, recorriendo primero el puente más largo, luego el siguiente y al final el puente más corto (P-23.2).'; }
+            if ($n === 'sistema_espiro') { $exp[] = 'Compuesto espiro: «espiro» + átomos de cada anillo, sin contar el átomo espiro, en orden creciente. Se numera empezando en el anillo menor, en el átomo contiguo al espiro, y se continúa por el átomo espiro hacia el anillo mayor (P-24.2).'; }
             if (strpos($n, 'retenido_hidrocarburo') === 0) { $exp[] = 'Nombre retenido preferido sin sustitución: tolueno, xileno (P-22.1.3), anisol (P-63.2) o acetileno (P-14.3.4.2).'; }
         }
         if (!empty($cl['halogeno'])) {
@@ -1809,8 +2556,18 @@ final class IupacOrganica
  * ===================================================================== */
 final class GeneradorOrganico
 {
-    public const FAMILIAS = ['halogenos', 'alquenos', 'alquinos', 'aromaticos', 'alcoholes', 'fenoles', 'eteres', 'aminas',
+    public const FAMILIAS = ['halogenos', 'alquenos', 'alquinos', 'aromaticos', 'biciclos', 'alcoholes', 'fenoles', 'eteres', 'aminas',
         'aldehidos', 'cetonas', 'acidos', 'esteres', 'amidas', 'nitrilos', 'nitro'];
+
+    /** Esqueletos de dos anillos por nivel (fase 2): fusionados, con puente, espiro, ensamblajes y multiplicativos. */
+    private const BICICLOS = [
+        1 => ['c1ccc2ccccc2c1', 'C1Cc2ccccc2C1', 'C1CCc2ccccc2C1', 'C1CCC2CCCCC2C1', 'C1CC2CCC1C2', 'c1ccc(cc1)-c1ccccc1',
+              'c1ccc(cc1)C1CCCCC1', 'c1ccc(Cc2ccccc2)cc1'],
+        2 => ['c1ccc2ccccc2c1', 'C1C=Cc2ccccc21', 'C1CCC2(CC1)CCCC2', 'C1CC2CCC1CC2', 'C1CCC(CC1)C1CCCCC1', 'c1ccc(Oc2ccccc2)cc1',
+              'c1ccc(CCc2ccccc2)cc1', 'C1=Cc2ccccc2CC1', 'C1CCC2CC2C1', 'C1CCC2(CC1)CCCC2', 'C1CC2CCC1C2'],
+        3 => ['c1ccc2ccccc2c1', 'C1CC2CC(C1)C2', 'C1CC2CCC(C1)C2', 'c1ccc2c(c1)CC2', 'C1CC12CCCCC2', 'C1CCC2CCCC2C1', 'CC(C)(c1ccccc1)c1ccccc1',
+              'c1ccc(-c2cccc3ccccc23)cc1', 'C1=CC2CCC1C2', 'C1CCC2(CC1)CCCCC2', 'O=C1CCCc2ccccc12', 'C1CC2CCCCC2C1'],
+    ];
 
     private const RAMAS = [
         1 => ['C', 'C', 'CC'],
@@ -1836,7 +2593,15 @@ final class GeneradorOrganico
         }
         $m = new MolOrg();
         $anillo = [];
-        if ($tipo === 'ciclico' || $tipo === 'ciclico_ramificado') {
+        if (in_array('biciclos', $familias, true)) {
+            $l = self::BICICLOS[$nivel];
+            $m = MolOrg::desdeSmiles($l[random_int(0, count($l) - 1)]);
+            $k = random_int(0, $nivel - 1);
+            for ($i = 0; $i < $k; $i++) {
+                $c = self::elegir(self::carbonos($m, 'any'));
+                if ($c !== null) { self::injertar($m, $c, self::RAMAS[1][random_int(0, 2)]); }
+            }
+        } elseif ($tipo === 'ciclico' || $tipo === 'ciclico_ramificado') {
             if ($aromatico) {
                 for ($i = 0; $i < 6; $i++) { $anillo[] = $m->nuevo('C', true); }
                 for ($i = 0; $i < 6; $i++) { $m->enlazar($anillo[$i], $anillo[($i + 1) % 6], MolOrg::AROM); }
@@ -1860,7 +2625,7 @@ final class GeneradorOrganico
             }
         }
         // grupos funcionales
-        $grupos = array_values(array_diff($familias, ['aromaticos']));
+        $grupos = array_values(array_diff($familias, ['aromaticos', 'biciclos']));
         if ($grupos) {
             [$gmin, $gmax] = $cfg['grp'];
             $n = random_int($gmin, $gmax);
@@ -1894,6 +2659,8 @@ final class GeneradorOrganico
     private static function carbonos(MolOrg $m, string $modo): array
     {
         $res = [];
+        $enAnillo = [];
+        foreach ($m->sistemas() as $sx) { foreach ($sx['atomos'] as $a) { $enAnillo[$a] = true; } }
         foreach ($m->el as $a => $e) {
             if ($e !== 'C' || $m->hidrogenos($a) < 1) { continue; }
             $het = false; $multiple = false;
@@ -1903,7 +2670,7 @@ final class GeneradorOrganico
                 // carbonos vecinos de grupos carbonílicos o de nitrilo: se evitan en los niveles bajos
             }
             if ($het) { continue; }
-            if ($modo === 'arom' && !$m->arom[$a]) { continue; }
+            if ($modo === 'arom' && !$m->arom[$a] && !(($enAnillo[$a] ?? false) && $multiple)) { continue; }
             if ($modo === 'sp3' && ($m->arom[$a] || $multiple)) { continue; }
             if ($modo === 'noarom' && $m->arom[$a]) { continue; }
             // no sobre carbonos unidos a carbonos funcionales (evita casos fuera de dominio)
