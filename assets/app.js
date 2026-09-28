@@ -1,4 +1,4 @@
-/* app.js – Interfaz del generador de alcanos y haloalcanos (JSME + api.php)  v3.0 */
+/* app.js – Interfaz del ejercitador de nomenclatura orgánica (JSME + api.php)  v4.0 */
 'use strict';
 
 const estado = {
@@ -104,7 +104,7 @@ async function generar() {
   mostrarError('');
   $('btnGenerar').disabled = true;
   try {
-    const d = await api('generar', { tipo: $('tipo').value, nivel: +$('nivel').value, halogenos: $('chkHalogenos').checked });
+    const d = await api('generar', { tipo: $('tipo').value, nivel: +$('nivel').value, familias: familiasMarcadas() });
     Object.assign(estado, { id: d.id, smiles: d.smiles, smilesNum: '', longitud: d.longitud, propio: false });
     $('avisoDibujo').hidden = true;
     mostrarMolecula(d.smiles);
@@ -172,14 +172,14 @@ async function desplegar() {
     estado.smilesNum = d.smiles_num;
 
     $('nombre').textContent = d.nombre;
-    $('filaTrad').hidden = !d.nombre_trad;
-    $('nombreTrad').textContent = d.nombre_trad || '';
-    $('filaSis').hidden = !d.nombre_sis;
-    $('nombreSis').textContent = d.nombre_sis || '';
-
-    const radico = [d.radicofuncional, d.radicofuncional_pin].filter(Boolean);
-    $('filaRadico').hidden = radico.length === 0;
-    $('nombreRadico').textContent = radico.join('  ·  ');
+    const lista = $('listaAlt');
+    lista.innerHTML = '';
+    (d.alternativas || []).forEach((a) => {
+      const div = document.createElement('div'); div.className = 'alt';
+      const e = document.createElement('span'); e.className = 'alt__etq'; e.textContent = a.etiqueta;
+      const n = document.createElement('span'); n.className = 'alt__nom'; n.textContent = a.nombre;
+      div.append(e, n); lista.appendChild(div);
+    });
     const tb = $('tablaEq');
     tb.innerHTML = '';
     (d.equivalencias || []).forEach((e) => {
@@ -188,10 +188,10 @@ async function desplegar() {
       tb.appendChild(tr);
     });
     $('bloqueEq').hidden = !(d.equivalencias && d.equivalencias.length);
-    $('bloqueAlt').hidden = !d.nombre_trad && !d.nombre_sis && $('bloqueEq').hidden && radico.length === 0;
+    $('bloqueAlt').hidden = !(d.alternativas && d.alternativas.length) && $('bloqueEq').hidden;
 
     $('nombreEn').textContent = d.nombre_en;
-    const enAlt = [d.nombre_en_trad, d.nombre_en_sis, d.radicofuncional_en].filter(Boolean);
+    const enAlt = d.alternativas_en || [];
     $('filaEnAlt').hidden = enAlt.length === 0;
     $('nombreEnAlt').textContent = enAlt.join('  ·  ');
 
@@ -236,3 +236,25 @@ $('chkNumeracion').addEventListener('change', (e) => {
   mostrarMolecula(e.target.checked && estado.smilesNum ? estado.smilesNum : estado.smiles);
 });
 $('chkEditar').addEventListener('change', (e) => modoEdicion(e.target.checked));
+
+/* ---------- casillas de familias (se recuerdan en este navegador) ---------- */
+function familiasMarcadas() {
+  return Array.from(document.querySelectorAll('input[name="familia"]:checked')).map((c) => c.value);
+}
+function guardarFamilias() {
+  try { localStorage.setItem('nomenclatura.familias', JSON.stringify(familiasMarcadas())); } catch (e) { /* sin almacenamiento */ }
+}
+function marcarFamilias(valores) {
+  document.querySelectorAll('input[name="familia"]').forEach((c) => { c.checked = valores.includes(c.value); });
+}
+(function restaurarFamilias() {
+  try {
+    const v = JSON.parse(localStorage.getItem('nomenclatura.familias') || 'null');
+    if (Array.isArray(v)) marcarFamilias(v);
+  } catch (e) { /* sin almacenamiento */ }
+})();
+$('familias').addEventListener('change', guardarFamilias);
+$('btnTodas').addEventListener('click', () => {
+  marcarFamilias(Array.from(document.querySelectorAll('input[name="familia"]')).map((c) => c.value)); guardarFamilias();
+});
+$('btnNinguna').addEventListener('click', () => { marcarFamilias([]); guardarFamilias(); });

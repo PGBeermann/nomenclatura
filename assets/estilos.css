@@ -106,3 +106,24 @@ select:focus, input:focus { outline: 2px solid var(--azul-2); outline-offset: 1p
 .tabla-eq th { background: #f1f4f9; font-weight: 600; }
 
 .check--control { flex-direction: row !important; align-self: center; font-size: .9rem !important; }
+
+/* ---------- v4.0: logo institucional ---------- */
+.cabecera__marca { display: flex; align-items: center; gap: 1.1rem; }
+.cabecera__logo  { flex: 0 0 auto; height: 84px; width: auto; display: block; }
+.cabecera__texto { min-width: 0; }
+@media (max-width: 640px) {
+  .cabecera__marca { gap: .75rem; align-items: flex-start; }
+  .cabecera__logo  { height: 56px; }
+}
+
+/* ---------- v4.0: casillas de familias de compuestos ---------- */
+.familias {
+  flex: 1 1 100%; margin: 4px 0 0; padding: 10px 14px 12px; border: 1px solid var(--borde); border-radius: 8px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px;
+}
+.familias legend { padding: 0 6px; font-size: .85rem; color: var(--suave); }
+.familias__acciones { margin-left: 8px; font-size: .8rem; }
+.familias__nota { grid-column: 1 / -1; margin: 6px 0 0; font-size: .8rem; color: var(--suave); }
+.controles .check--familia { flex-direction: row; align-items: center; gap: 6px; font-size: .92rem; color: var(--texto); cursor: pointer; }
+.check--familia input { accent-color: var(--azul); width: 16px; height: 16px; }
+.enlace { background: none; border: 0; padding: 0; font: inherit; color: var(--azul-2); text-decoration: underline; cursor: pointer; }
