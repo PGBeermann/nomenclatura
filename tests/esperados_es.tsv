@@ -1,0 +1,44 @@
+CCO	etanol
+CC(C)=O	propan-2-ona
+CC(O)=O	ácido acético
+OC(=O)c1ccccc1	ácido benzoico
+Oc1ccc(C)cc1	4-metilfenol
+Nc1ccc(Cl)cc1	4-cloroanilina
+COc1ccccc1	anisol
+COc1ccc(cc1)[N+](=O)[O-]	1-metoxi-4-nitrobenceno
+CCOCC	etoxietano
+CCOC(C)=O	acetato de etilo
+CCCC(=O)OC(C)C	butanoato de propan-2-ilo
+CC(=O)N(C)C	N,N-dimetilacetamida
+CCC#N	propanonitrilo
+C=CC#N	prop-2-enonitrilo
+N#CCCC#N	butanodinitrilo
+OC(=O)CCCCC(O)=O	ácido hexanodioico
+O=CCCC=O	butanodial
+CC(=O)CC(=O)C	pentano-2,4-diona
+OCC(O)CO	propano-1,2,3-triol
+NCCN	etano-1,2-diamina
+C=CC=C	buta-1,3-dieno
+C#CC=C	but-1-en-3-ino
+CC=CC(C)O	pent-3-en-2-ol
+OC1CCCCC1	ciclohexanol
+O=C1CCC(C)CC1	4-metilciclohexan-1-ona
+OC(=O)C1CCC=CC1	ácido ciclohex-3-eno-1-carboxílico
+O=Cc1ccc(O)cc1	4-hidroxibenzaldehído
+NC(=O)c1ccccc1	benzamida
+CC(C)(C)O	2-metilpropan-2-ol
+ClC(Cl)Cl	triclorometano
+C=C	eteno
+CC#CC	but-2-ino
+CCC(C)C(=O)O	ácido 2-metilbutanoico
+OC(=O)C=Cc1ccccc1	ácido 3-fenilprop-2-enoico
+CC(=O)c1ccccc1	1-feniletan-1-ona
+O=C1C=CC(=O)C=C1	ciclohexa-2,5-dieno-1,4-diona
+CN	metanamina
+CNC	N-metilmetanamina
+CC(=O)Oc1ccccc1	acetato de fenilo
+COC(=O)CC(=O)OC	propanodioato de dimetilo
+OC(=O)c1ccccc1O	ácido 2-hidroxibenzoico
+CC(=O)Oc1ccccc1C(O)=O	ácido 2-(acetiloxi)benzoico
+CC(C)Cc1ccc(cc1)C(C)C(O)=O	ácido 2-[4-(2-metilpropil)fenil]propanoico
+CC(=O)Nc1ccc(O)cc1	N-(4-hidroxifenil)acetamida
